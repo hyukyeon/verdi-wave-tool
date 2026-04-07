@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-verdi_wave_tool.py — Verdi nWave LTE/NR Waveform Analysis Tool
+verdi_wave_tool.py - Verdi nWave LTE/NR Waveform Analysis Tool
 ==============================================================
 Config  ./config/scn_base.lst   sim environment hierarchy
         ./config/scn_*.lst      signal groups + scenario definitions
@@ -200,14 +200,14 @@ def parse_scn(path: Path, res: Resolver):
             section = m.group(1)
             continue
 
-        # ── [BASE] ──────────────────────────────────────────────────────────
+        # -- [BASE] ----------------------------------------------------------
         if section == 'BASE':
             if '=' in s:
                 k, _, v = s.partition('=')
                 if k.strip() == 'sim':
                     sim = v.strip()
 
-        # ── [GROUPS] ────────────────────────────────────────────────────────
+        # -- [GROUPS] --------------------------------------------------------
         elif section == 'GROUPS':
             m = _RSF.match(s)
             if m:                                           # N.M.K  sub-field
@@ -234,7 +234,7 @@ def parse_scn(path: Path, res: Resolver):
                                color=parts[1] if len(parts) > 1 else None)
                 groups.append(cur_g)
 
-        # ── [EXPRESSIONS] ───────────────────────────────────────────────────
+        # -- [EXPRESSIONS] ---------------------------------------------------
         elif section == 'EXPRESSIONS':
             m = _RE.match(s)
             if m:
@@ -255,7 +255,7 @@ def parse_scn(path: Path, res: Resolver):
                     alias = tail[2] if len(tail) > 2 else m.group(1),
                 ))
 
-        # ── [SCENARIOS] ─────────────────────────────────────────────────────
+        # -- [SCENARIOS] -----------------------------------------------------
         elif section == 'SCENARIOS':
             m = _RSP.match(s)
             if m:                                           # S1.M  param
@@ -311,9 +311,9 @@ def gen_rc(fsdb: str, groups: List[Group], exprs: List[Expr]) -> str:
 
     for g in groups:
         bg = f" -backgroundcolor {g.color}" if g.color else ""
-        w(f"# {'─'*62}")
+        w(f"# {'-'*62}")
         w(f"# {g.num}.  {g.name}")
-        w(f"# {'─'*62}")
+        w(f"# {'-'*62}")
         w(f"wvSetGroupBegin -name {{{g.name}}}{bg}")
         for sig in g.sigs:
             w(f"wvAddSignal {{{sig.path}}}")
@@ -328,9 +328,9 @@ def gen_rc(fsdb: str, groups: List[Group], exprs: List[Expr]) -> str:
         w()
 
     if exprs:
-        w(f"# {'─'*62}")
+        w(f"# {'-'*62}")
         w("# EXPRESSIONS")
-        w(f"# {'─'*62}")
+        w(f"# {'-'*62}")
         w("wvSetGroupBegin -name {EXPRESSIONS} -backgroundcolor pink")
         for e in exprs:
             w(f"wvAddExprSignal -name {{{e.alias}}} -color {e.color} -expr {{{e.expr}}}")
@@ -356,7 +356,7 @@ def gen_tcl(fsdb: str, clk_sig: str, scenarios: List[Scenario]) -> str:
         f"set report_dir {{{str(OUT_DIR)}}}",
         f"set fsdb_file  {{{fsdb}}}", "",
         f"source {{{str(RC_FILE)}}}", "",
-        f"# Clock period (ps) — auto-detect, fallback to 1000 ps (1 ns)",
+        f"# Clock period (ps) - auto-detect, fallback to 1000 ps (1 ns)",
         f"if {{[catch {{set clk_period [nwGetClockPeriod {{{clk_sig}}}]}}]}} {{",
         f"    set clk_period 1000",
         f"}}", "",
@@ -375,10 +375,10 @@ def gen_tcl(fsdb: str, clk_sig: str, scenarios: List[Scenario]) -> str:
     return '\n'.join(L)
 
 
-# ── Common helper procs ───────────────────────────────────────────────────────
+# -- Common helper procs -------------------------------------------------------
 
 def _write_procs(w):
-    w("# ── Helper Procs ─────────────────────────────────────────────────────")
+    w("# -- Helper Procs -----------------------------------------------------")
     w()
 
     w("proc count_edges {sig etype} {")
@@ -428,11 +428,11 @@ def _write_procs(w):
     w("}")
     w()
 
-    w("# ─────────────────────────────────────────────────────────────────────")
+    w("# ---------------------------------------------------------------------")
     w()
 
 
-# ── Per-scenario TCL writers ──────────────────────────────────────────────────
+# -- Per-scenario TCL writers --------------------------------------------------
 
 def _scn_sfr_check(w, scn: Scenario):
     watch    = [p.strip() for p in scn.params.get('watch', '').split(',') if p.strip()]
@@ -441,7 +441,7 @@ def _scn_sfr_check(w, scn: Scenario):
     rpt      = f"$report_dir/{scn.num}_sfr_check.txt"
 
     w(f"set fd [open {{{rpt}}} w]")
-    w(f"puts $fd \"SFR-Check {scn.num} — [clock format [clock seconds]]\"")
+    w(f"puts $fd \"SFR-Check {scn.num} - [clock format [clock seconds]]\"")
     w(f"puts $fd \"response : {response}\"")
     w(f"puts $fd \"max_lat  : {max_lat} cycles\"")
     w(f"puts $fd \"{'='*60}\"")
@@ -462,7 +462,7 @@ def _scn_timing(w, scn: Scenario):
     rpt  = f"$report_dir/{scn.num}_timing.txt"
 
     w(f"set fd [open {{{rpt}}} w]")
-    w(f"puts $fd \"Timing {scn.num} — [clock format [clock seconds]]\"")
+    w(f"puts $fd \"Timing {scn.num} - [clock format [clock seconds]]\"")
     w(f"puts $fd \"reference : {ref}\"")
     w(f"puts $fd \"{'='*60}\"")
     w(f"set t_ref [nwSearchNext -signal {{{ref}}} -type rising_edge \\")
@@ -495,7 +495,7 @@ def _scn_edge_count(w, scn: Scenario):
     rpt  = f"$report_dir/{scn.num}_edge_count.txt"
 
     w(f"set fd [open {{{rpt}}} w]")
-    w(f"puts $fd \"Edge-Count {scn.num} — [clock format [clock seconds]]\"")
+    w(f"puts $fd \"Edge-Count {scn.num} - [clock format [clock seconds]]\"")
     w(f"puts $fd \"edge: {edge}\"")
     w(f"puts $fd \"{'='*60}\"")
     w(f"set clk_cnt [count_edges [nwGetClockSignal] rising]")
@@ -515,7 +515,7 @@ def _scn_frame_sync(w, scn: Scenario):
     n_frames = int(scn.params.get('num_frames', '4'))
 
     w(f"# {std}: frame={f_ns}ns  subframe={sf_ns}ns  slot={sl_ns}ns  n={n_frames}")
-    w(f"set unit_ps 1000   ;# 1ns=1000ps — adjust for your timescale")
+    w(f"set unit_ps 1000   ;# 1ns=1000ps - adjust for your timescale")
     w(f"set f_ps  [expr {{{f_ns}  * $unit_ps}}]")
     w(f"set sf_ps [expr {{{sf_ns} * $unit_ps}}]")
     w(f"set sl_ps [expr {{{sl_ns} * $unit_ps}}]")
