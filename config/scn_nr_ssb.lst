@@ -1,0 +1,123 @@
+# =============================================================================
+# scn_nr_ssb.lst — BlockSim NR SSB Debug Scenario
+# =============================================================================
+# 목적: NR Synchronization Signal Block (SSB) 동작 검증
+#       PSS/SSS/PBCH 순서·타이밍 / SSB 주기성 / 빔 스위핑 스케줄 확인
+# =============================================================================
+
+[BASE]
+sim = blocksim_nr_ssb
+
+# =============================================================================
+# [GROUPS]
+# =============================================================================
+
+[GROUPS]
+
+1.     TIMING          gray
+1.1    clk             bin     gray
+1.2    rst             bin     gray
+1.3    frame           dec     gray
+1.4    subfrm          dec     gray
+1.5    slot            dec     gray
+1.6    sym             dec     gray
+
+2.     SFR             lightyellow
+2.1    sfr.ssb_cfg[31:0]          hex    yellow                   SSB_CFG
+2.1.1  sfr.ssb_cfg[0]             bin    -                        .EN
+2.1.2  sfr.ssb_cfg[3:1]           dec    -                        .PERIODICITY
+2.1.3  sfr.ssb_cfg[9:4]           dec    -                        .OFFSET
+2.1.4  sfr.ssb_cfg[15:10]         dec    -                        .BEAM_NUM
+2.1.5  sfr.ssb_cfg[18:16]         dec    -                        .CASE
+2.2    sfr.ssb_cell_id[31:0]      hex    yellow                   SSB_CELL_ID
+2.2.1  sfr.ssb_cell_id[8:0]       dec    -                        .NID1
+2.2.2  sfr.ssb_cell_id[10:9]      dec    -                        .NID2
+2.2.3  sfr.ssb_cell_id[19:11]     dec    -                        .CELL_ID
+2.3    sfr.pbch_cfg[31:0]         hex    yellow                   PBCH_CFG
+2.3.1  sfr.pbch_cfg[0]            bin    -                        .EN
+2.3.2  sfr.pbch_cfg[9:0]          dec    -                        .SFN
+2.4    sfr.beam_cfg[31:0]         hex    yellow                   BEAM_CFG
+2.4.1  sfr.beam_cfg[0]            bin    -                        .SWEEP_EN
+2.4.2  sfr.beam_cfg[7:1]          dec    -                        .BEAM_NUM
+2.4.3  sfr.beam_cfg[17:16]        dec    -                        .TX_PORT
+2.5    sfr.chan_ctrl[31:0]        hex    yellow                   CHAN_CTRL
+2.5.1  sfr.chan_ctrl[0]            bin    -                        .SSB_EN
+2.5.2  sfr.chan_ctrl[1]            bin    -                        .BEAM_EN
+2.5.3  sfr.chan_ctrl[30]           bin    -                        .SOFT_RST
+
+3.     SSB             white
+3.1    top.ssb_en                 bin    white
+3.2    top.ssb_vld                bin    white
+3.3    top.ssb_idx[2:0]           dec    white
+3.4    top.ssb_beam_id[5:0]       dec    white
+3.5    top.ssb_periodicity[2:0]   dec    white
+3.6    top.ssb_half_frame_bit     bin    white
+3.7    top.ssb_burst_done         bin    white
+
+4.     PSS             cyan
+4.1    top.pss_en                 bin    cyan
+4.2    top.pss_vld                bin    cyan
+4.3    top.pss_seq[127:0]         hex    cyan    30
+4.4    top.pss_nid2[1:0]          dec    cyan
+4.5    top.pss_sym_idx[3:0]       dec    cyan
+
+5.     SSS             green
+5.1    top.sss_en                 bin    green
+5.2    top.sss_vld                bin    green
+5.3    top.sss_seq[127:0]         hex    green   30
+5.4    top.sss_nid1[8:0]          dec    green
+5.5    top.sss_cell_id[8:0]       dec    green
+
+6.     PBCH            magenta
+6.1    top.pbch_en                bin    magenta
+6.2    top.pbch_vld               bin    magenta
+6.3    top.pbch_mib[23:0]         hex    magenta 25
+6.4    top.pbch_sfn_msb[5:0]      dec    magenta
+6.5    top.pbch_dmrs_idx[2:0]     dec    magenta
+6.6    top.pbch_payload[31:0]     hex    magenta
+
+7.     BEAM            orange
+7.1    top.beam_sweep_en          bin    orange
+7.2    top.beam_idx[5:0]          dec    orange
+7.3    top.beam_angle[11:0]       dec    orange
+7.4    top.ssb_period_cnt[7:0]    dec    orange
+7.5    top.ssb_burst_cnt[2:0]     dec    orange
+
+# =============================================================================
+# [EXPRESSIONS]
+# =============================================================================
+
+[EXPRESSIONS]
+
+E1    {top.pss_vld & top.sss_vld}                      bin    cyan      PSS_SSS_OVERLAP
+E2    {top.ssb_burst_done & ~top.ssb_en}               bin    white     SSB_BURST_END
+
+# =============================================================================
+# [SCENARIOS]
+# =============================================================================
+
+[SCENARIOS]
+
+# S1: SFR 쓰기 → SSB 출력 레이턴시 측정
+S1     sfr-check
+S1.1   watch       = 2.1, 2.5
+S1.2   response    = 3.1
+S1.3   max_latency = 4
+
+# S2: SSB 기준 PSS/SSS/PBCH 첫 활성화 타이밍 순서 검증
+S2     timing
+S2.1   reference   = 3.1
+S2.2   compare     = 4.2, 5.2, 6.2
+
+# S3: SSB 구성 신호별 전송 횟수 카운트
+S3     edge-count
+S3.1   signals     = 3.2, 4.2, 5.2, 6.2
+S3.2   edge        = rising
+
+# S4: NR 프레임/서브프레임/슬롯 경계 마커 (μ=1, 30kHz SCS)
+S4     frame-sync
+S4.1   standard    = NR
+S4.2   frame_ns    = 10000000
+S4.3   subfrm_ns   = 500000
+S4.4   slot_ns     = 250000
+S4.5   num_frames  = 20
