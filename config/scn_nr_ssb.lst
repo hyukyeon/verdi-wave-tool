@@ -1,8 +1,8 @@
 # =============================================================================
 # scn_nr_ssb.lst — BlockSim NR SSB Debug Scenario
 # =============================================================================
-# 목적: NR Synchronization Signal Block (SSB) 동작 검증
-#       PSS/SSS/PBCH 순서·타이밍 / SSB 주기성 / 빔 스위핑 스케줄 확인
+# Purpose: Verify NR Synchronization Signal Block (SSB) behavior
+#          PSS/SSS/PBCH order and timing / SSB periodicity / beam sweep schedule
 # =============================================================================
 
 [BASE]
@@ -98,23 +98,23 @@ E2    {top.ssb_burst_done & ~top.ssb_en}               bin    white     SSB_BURS
 
 [SCENARIOS]
 
-# S1: SFR 쓰기 → SSB 출력 레이턴시 측정
+# S1: SFR write -> SSB output latency measurement
 S1     sfr-check
 S1.1   watch       = 2.1, 2.5
 S1.2   response    = 3.1
 S1.3   max_latency = 4
 
-# S2: SSB 기준 PSS/SSS/PBCH 첫 활성화 타이밍 순서 검증
+# S2: PSS/SSS/PBCH first-activation timing order relative to SSB
 S2     timing
 S2.1   reference   = 3.1
 S2.2   compare     = 4.2, 5.2, 6.2
 
-# S3: SSB 구성 신호별 전송 횟수 카운트
+# S3: Rising edge count per SSB component signal (transmission count check)
 S3     edge-count
 S3.1   signals     = 3.2, 4.2, 5.2, 6.2
 S3.2   edge        = rising
 
-# S4: NR 프레임/서브프레임/슬롯 경계 마커 (μ=1, 30kHz SCS)
+# S4: NR frame / subframe / slot boundary markers (numerology mu=1, 30 kHz SCS)
 S4     frame-sync
 S4.1   standard    = NR
 S4.2   frame_ns    = 10000000

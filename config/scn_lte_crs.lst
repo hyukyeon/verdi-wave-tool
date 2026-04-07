@@ -1,8 +1,8 @@
 # =============================================================================
 # scn_lte_crs.lst — TopSim LTE CRS Debug Scenario
 # =============================================================================
-# 목적: LTE Cell-specific Reference Signal (CRS) 동작 검증
-#       SFR 설정 → CRS 출력 타이밍 / PDSCH-PDCCH 정렬 / 심볼 마스크 확인
+# Purpose: Verify LTE Cell-specific Reference Signal (CRS) behavior
+#          SFR write -> CRS output timing / PDSCH-PDCCH alignment / symbol mask
 # =============================================================================
 
 [BASE]
@@ -11,13 +11,13 @@ sim = topsim_lte
 # =============================================================================
 # [GROUPS]
 # =============================================================================
-# 형식:
+# Format:
 #   N.     GROUP_NAME   [bg_color]
 #   N.M    path         radix   color    [height]   [alias]
-#   N.M.K  path         radix   -        [height]   [alias]   (- = group 색 상속)
+#   N.M.K  path         radix   -        [height]   [alias]   (- inherits group color)
 #
-# path 키워드:  clk  rst  frame  subfrm  slot  sym
-# path 접두어:  top.X  sfr.X
+# Path keywords : clk  rst  frame  subfrm  slot  sym
+# Path prefixes : top.X   sfr.X
 # =============================================================================
 
 [GROUPS]
@@ -73,7 +73,7 @@ sim = topsim_lte
 # =============================================================================
 # [EXPRESSIONS]
 # =============================================================================
-# 형식:  EN  {expression}  radix  color  alias
+# Format:  EN  {expression}  radix  color  alias
 # =============================================================================
 
 [EXPRESSIONS]
@@ -84,32 +84,32 @@ E2    {top.pdcch_dl_en & top.crs_en}          bin    yellow    PDCCH_CRS_ACTIVE
 # =============================================================================
 # [SCENARIOS]
 # =============================================================================
-# 형식:
+# Format:
 #   SN    scenario-type          (sfr-check | timing | edge-count | frame-sync)
 #   SN.M  key = value
 #
-# key 내 N.M 참조 → [GROUPS]에 정의된 해당 신호의 full path로 자동 변환
+# N.M references in values are automatically resolved to the signal's full path
 # =============================================================================
 
 [SCENARIOS]
 
-# S1: SFR 쓰기 → CRS 출력 레이턴시 측정
+# S1: SFR write -> CRS output latency measurement
 S1     sfr-check
 S1.1   watch       = 2.1, 2.2, 2.3
 S1.2   response    = 3.1
 S1.3   max_latency = 8
 
-# S2: CRS 기준 PDSCH/PDCCH 첫 활성화 타이밍 델타
+# S2: First-activation timing delta of PDSCH/PDCCH relative to CRS
 S2     timing
 S2.1   reference   = 3.1
 S2.2   compare     = 4.2, 5.2
 
-# S3: 채널별 valid 엣지 카운트 (전송 횟수 확인)
+# S3: Rising edge count per channel valid signal (transmission count check)
 S3     edge-count
 S3.1   signals     = 3.2, 4.2, 5.2
 S3.2   edge        = rising
 
-# S4: LTE 프레임/서브프레임/슬롯 경계 마커
+# S4: LTE frame / subframe / slot boundary markers
 S4     frame-sync
 S4.1   standard    = LTE
 S4.2   frame_ns    = 10000000

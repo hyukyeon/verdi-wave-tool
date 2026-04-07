@@ -1,29 +1,29 @@
 # =============================================================================
 # scn_base.lst — Simulation Environment Hierarchy
 # =============================================================================
-# 각 [section]은 하나의 sim 환경을 정의합니다.
-# scn_*.lst 파일의 [BASE] sim = <section명> 으로 참조됩니다.
+# Each [section] defines one simulation environment.
+# Referenced from scn_*.lst via:  [BASE]  sim = <section_name>
 #
 # Keys:
-#   top    DUT 최상위 경로 (full path)
-#   clk    클럭 신호 (full path)
-#   rst    리셋 신호 (full path, active-low)
-#   sfr    SFR 베이스 경로 (full path)
-#   frame  SFN/frame 카운터 — top. 접두어 사용 가능
-#   subfrm 서브프레임 카운터
-#   slot   슬롯 카운터
-#   sym    심볼 카운터
+#   top    Full path to the DUT top-level instance
+#   clk    Clock signal (full path)
+#   rst    Reset signal (full path, active-low)
+#   sfr    SFR base path (full path)
+#   frame  SFN / frame counter — may use top. prefix
+#   subfrm Subframe counter
+#   slot   Slot counter
+#   sym    Symbol counter
 #
-# scn_*.lst에서 신호 경로 작성 규칙:
-#   top.X   ->  {top}.X         예) top.pdsch_dl_en
-#   sfr.X   ->  {sfr}.X         예) sfr.pdsch_cfg[31:0]
-#   clk     ->  {clk}           키워드 직접 사용
+# Signal path resolution rules in scn_*.lst:
+#   top.X   ->  {top}.X        e.g. top.pdsch_dl_en
+#   sfr.X   ->  {sfr}.X        e.g. sfr.pdsch_cfg[31:0]
+#   clk     ->  {clk}          keyword used directly
 #   rst     ->  {rst}
-#   frame, subfrm, slot, sym    키워드 직접 사용
+#   frame, subfrm, slot, sym   keywords used directly
 # =============================================================================
 
 # -----------------------------------------------------------------------------
-# TopSim — LTE 전체 시스템 시뮬레이션
+# TopSim — LTE full-system simulation
 # -----------------------------------------------------------------------------
 [topsim_lte]
 top    = tb.u_top.u_lte_bb
@@ -36,7 +36,7 @@ slot   = top.slot_cnt[0]
 sym    = top.sym_cnt[3:0]
 
 # -----------------------------------------------------------------------------
-# BlockSim — NR SSB 블록 단위 시뮬레이션
+# BlockSim — NR SSB block-level simulation
 # -----------------------------------------------------------------------------
 [blocksim_nr_ssb]
 top    = tb.u_ssb_top
@@ -49,7 +49,7 @@ slot   = top.slot_idx[5:0]
 sym    = top.sym_idx[3:0]
 
 # -----------------------------------------------------------------------------
-# (추가 환경 작성 템플릿)
+# (Template for adding a new environment)
 # -----------------------------------------------------------------------------
 # [blocksim_lte_pdsch]
 # top    = tb.u_pdsch_top
