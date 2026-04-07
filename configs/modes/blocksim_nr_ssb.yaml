@@ -1,0 +1,259 @@
+# =============================================================================
+# blocksim_nr_ssb.yaml — BlockSim NR SSB Debugging Mode
+# =============================================================================
+# 목적: NR Synchronization Signal Block (SSB) 동작 검증
+#       - PSS/SSS/PBCH 순서 및 타이밍 검증
+#       - SSB 주기성(periodicity), 빔 스위핑 스케줄 확인
+#       - SFR 설정 → SSB 출력 레이턴시 측정
+#
+# 사용:
+#   python3 verdi_wave_tool.py -f blocksim.fsdb -c configs/modes/blocksim_nr_ssb.yaml
+# =============================================================================
+
+# BlockSim은 특정 블록 단위 TB 경로
+top:   "tb.u_ssb_top"
+clock: "tb.clk"
+reset: "tb.rst_n"
+
+frame_sync:    "tb.u_ssb_top.sfn[9:0]"
+subframe_sync: "tb.u_ssb_top.half_frame[0]"    # NR half-frame indicator
+slot_sync:     "tb.u_ssb_top.slot_idx[5:0]"    # NR: 최대 80 slots/frame (μ=3)
+symbol_sync:   "tb.u_ssb_top.sym_idx[3:0]"
+
+# ---------------------------------------------------------------------------
+# 채널 정의 — SSB 내부 구성요소 분해 + 빔 정보
+# ---------------------------------------------------------------------------
+channels:
+
+  # SSB 전체 (최상위 제어)
+  SSB:
+    color: white
+    signals:
+      - name: en
+        path: ssb_en
+        radix: bin
+      - name: vld
+        path: ssb_vld
+        radix: bin
+      - name: idx
+        path: ssb_idx[2:0]          # SSB index (0~7 for FR1)
+        radix: dec
+      - name: beam_id
+        path: ssb_beam_id[5:0]
+        radix: dec
+      - name: periodicity
+        path: ssb_periodicity[2:0]  # 0=5ms, 1=10ms, 2=20ms, 3=40ms, 4=80ms, 5=160ms
+        radix: dec
+      - name: half_frame
+        path: ssb_half_frame_bit
+        radix: bin
+      - name: done
+        path: ssb_burst_done
+        radix: bin
+
+  # PSS — Primary Synchronization Signal
+  PSS:
+    color: cyan
+    signals:
+      - name: en
+        path: pss_en
+        radix: bin
+      - name: vld
+        path: pss_vld
+        radix: bin
+      - name: seq
+        path: pss_seq[127:0]
+        radix: hex
+        height: 30
+      - name: nid2
+        path: pss_nid2[1:0]         # Physical layer cell ID part 2 (0~2)
+        radix: dec
+      - name: sym_idx
+        path: pss_sym_idx[3:0]      # OFDM symbol index within SSB (0~3)
+        radix: dec
+
+  # SSS — Secondary Synchronization Signal
+  SSS:
+    color: green
+    signals:
+      - name: en
+        path: sss_en
+        radix: bin
+      - name: vld
+        path: sss_vld
+        radix: bin
+      - name: seq
+        path: sss_seq[127:0]
+        radix: hex
+        height: 30
+      - name: nid1
+        path: sss_nid1[8:0]         # Physical layer cell ID part 1 (0~335)
+        radix: dec
+      - name: cell_id
+        path: sss_cell_id[8:0]      # = 3*NID1 + NID2 (0~1007)
+        radix: dec
+
+  # PBCH — Physical Broadcast Channel (MIB 포함)
+  PBCH:
+    color: magenta
+    signals:
+      - name: en
+        path: pbch_en
+        radix: bin
+      - name: vld
+        path: pbch_vld
+        radix: bin
+      - name: mib
+        path: pbch_mib[23:0]
+        radix: hex
+        height: 25
+      - name: sfn_msb
+        path: pbch_sfn_msb[5:0]     # SFN upper 6 bits (MIB에 포함)
+        radix: dec
+      - name: dmrs_idx
+        path: pbch_dmrs_idx[2:0]    # DMRS sequence index
+        radix: dec
+      - name: payload
+        path: pbch_payload[31:0]
+        radix: hex
+
+  # DMRS for SSB
+  DMRS:
+    color: lightgreen
+    signals:
+      - name: en
+        path: ssb_dmrs_en
+        radix: bin
+      - name: vld
+        path: ssb_dmrs_vld
+        radix: bin
+      - name: seq
+        path: ssb_dmrs_seq[63:0]
+        radix: hex
+
+  # 빔 관리 / 스케줄러
+  BEAM:
+    color: orange
+    signals:
+      - name: sweep_en
+        path: beam_sweep_en
+        radix: bin
+      - name: idx
+        path: beam_idx[5:0]
+        radix: dec
+      - name: angle
+        path: beam_angle[11:0]      # 빔 조향 각도 (fixed point)
+        radix: dec
+      - name: period_cnt
+        path: ssb_period_cnt[7:0]   # 주기 카운터
+        radix: dec
+      - name: burst_cnt
+        path: ssb_burst_cnt[2:0]    # burst 내 SSB index 카운터
+        radix: dec
+
+# ---------------------------------------------------------------------------
+# SFR — SSB 설정 레지스터 위주
+# ---------------------------------------------------------------------------
+sfr:
+  base_path: "tb.u_ssb_top.u_sfr"
+
+  registers:
+
+    SSB_CFG:
+      path: "ssb_cfg[31:0]"
+      fields:
+        EN:           "[0]"
+        PERIODICITY:  "[3:1]"     # 0=5ms,1=10ms,2=20ms,3=40ms,4=80ms,5=160ms
+        OFFSET:       "[9:4]"     # SSB offset within half-frame (0~13 slots)
+        BEAM_NUM:     "[15:10]"   # 스캔할 빔 수 (1~64)
+        HALF_FRAME:   "[16]"      # 0=first, 1=second half-frame
+        CASE:         "[19:17]"   # SSB pattern case (A~E for FR1/FR2)
+
+    SSB_CELL_ID:
+      path: "ssb_cell_id[31:0]"
+      fields:
+        NID1:         "[8:0]"     # 0~335
+        NID2:         "[10:9]"    # 0~2
+        CELL_ID:      "[19:11]"   # auto-computed = 3*NID1+NID2
+
+    PBCH_CFG:
+      path: "pbch_cfg[31:0]"
+      fields:
+        EN:           "[0]"
+        SFN:          "[9:0]"     # 현재 SFN (PBCH MIB에 포함)
+        SUBCARRIER_OFFSET: "[15:10]"
+        DMR_TYPE_A_POS:   "[17:16]"
+
+    BEAM_CFG:
+      path: "beam_cfg[31:0]"
+      fields:
+        SWEEP_EN:     "[0]"
+        BEAM_NUM:     "[7:1]"
+        CODEBOOK_IDX: "[15:8]"
+        TX_PORT:      "[17:16]"   # 안테나 포트 수
+
+    TIMING_CFG:
+      path: "timing_cfg[31:0]"
+      fields:
+        SSB_SLOT_OFFSET: "[5:0]"   # SSB 시작 슬롯 오프셋
+        SSB_SYM_OFFSET:  "[9:6]"   # SSB 시작 심볼 오프셋
+        GUARD_PERIOD:    "[15:10]"
+
+    CHAN_CTRL:
+      path: "chan_ctrl[31:0]"
+      fields:
+        SSB_EN:       "[0]"
+        BEAM_EN:      "[1]"
+        SOFT_RST:     "[30]"
+        HARD_RST:     "[31]"
+
+# ---------------------------------------------------------------------------
+# 시나리오 파라미터 — NR SSB 디버깅 최적화
+# ---------------------------------------------------------------------------
+scenarios:
+
+  sfr_check:
+    max_latency_cycles: 4        # BlockSim은 레이턴시 스펙이 더 타이트
+    watch_sfr:
+      - SSB_CFG
+      - SSB_CELL_ID
+      - PBCH_CFG
+      - CHAN_CTRL
+
+  timing:
+    reference_channel: "SSB"     # SSB 기준으로 PSS/SSS/PBCH 순서 검증
+    compare_channels:
+      - "PSS"
+      - "SSS"
+      - "PBCH"
+      - "DMRS"
+    time_unit: "ns"
+
+  compare:
+    mode: "multi-instance"
+    instances:
+      - "beam0"
+      - "beam1"
+      - "beam2"
+      - "beam3"
+    signals_to_compare:
+      - "pss_seq[127:0]"
+      - "sss_seq[127:0]"
+      - "ssb_vld"
+
+  edge_count:
+    channels:
+      - SSB
+      - PSS
+      - SSS
+      - PBCH
+      - BEAM
+    signal_key: "vld"
+    edge_type:  "rising"
+
+  frame_sync:
+    standard:        "NR"
+    lte_frame_ns:    10000000    # 10ms frame (NR도 동일)
+    nr_subframe_ns:   500000     # μ=1 (30kHz SCS)
+    nr_slot_ns:       250000     # μ=2 (60kHz SCS) — SSB FR1 typical
+    num_frames:       20         # BlockSim은 짧은 구간, SSB 주기 20ms 커버
