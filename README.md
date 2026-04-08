@@ -46,18 +46,13 @@ output/
 A scenario file can contain three sections: `[GROUPS]`, `[VIRTUAL_BUSES]`, and `[MARKERS]`.
 
 ### 1. `[GROUPS]` - Main Signal List
-Defines the visual hierarchy in nWave.
 
 ```
 # N.     GROUP_NAME    [bg_color]
 # N.M    path          radix/type  color  [height]  [alias]
 ```
 
-- **radix/type**: `hex`, `bin`, `dec`, `oct` or **`analog`** (for wave display).
-- **path**: Use prefix keys from `scn_base.lst` (e.g., `top.sig`) or a name defined in `[VIRTUAL_BUSES]`.
-
 ### 2. `[VIRTUAL_BUSES]` - Signal Combination
-Combine multiple discrete bits into a single bus for display.
 
 ```ini
 [VIRTUAL_BUSES]
@@ -66,34 +61,42 @@ VBUS_STATE  =  top.state[2], top.state[1], top.state[0]
 ```
 
 ### 3. `[MARKERS]` - Time Annotations
-Place markers at specific simulation times (in ps) automatically.
 
 ```ini
 [MARKERS]
 # Time(ps)   Name          Color
 1000000      START_DATA    white
-5500000      IRQ_TRIGGER   red
 ```
 
 ---
 
-## Advanced Features Example (`config/scn_example.lst`)
+## Reference: Supported Values
 
-```ini
-[GROUPS]
-1.     RF_SIGNALS      lightcyan
-1.1    top.tx_i        analog      cyan    80      TX_I_WAVE
-1.2    top.tx_q        analog      green   80      TX_Q_WAVE
+### 1. Radix (`radix/type`)
+- `hex`: Hexadecimal (Default for buses)
+- `bin`: Binary (Default for 1-bit)
+- `dec`: Decimal
+- `oct`: Octal
+- **`analog`**: Displays the signal as an analog waveform (Step/Linear)
 
-2.     STATE_MON       yellow
-2.1    VBUS_STATE      hex         yellow  30      CURR_STATE
+### 2. Colors (`color` / `bg_color`)
+Standard Verdi color names are supported:
+- **Primary**: `red`, `green`, `blue`, `yellow`, `cyan`, `magenta`, `white`, `black`
+- **Secondary**: `gray`, `orange`, `pink`, `brown`, `purple`
+- **Light Variants**: `lightyellow`, `lightcyan`, `lightgray`
+- **Inherit**: `-` (dash) in the signal color column inherits the group color.
 
-[VIRTUAL_BUSES]
-VBUS_STATE  =  top.s0, top.s1, top.s2
+### 3. Signal Height (`height`)
+- Integer value in pixels.
+- Default: `15`
+- Recommended for Analog: `80` ~ `120`
+- Recommended for Buses: `25` ~ `35`
 
-[MARKERS]
-1000000    INIT_DONE     white
-```
+### 4. Font Configuration
+Fonts in Verdi are usually set via the global resource file or a TCL command.
+While individual signal font setting is less common in standard RC files, you can adjust the global display font in Verdi via:
+- `Tools -> Options -> Waveform -> Font`
+- Common values: `Arial 10`, `Courier 12`, `Fixed 10`
 
 ---
 
