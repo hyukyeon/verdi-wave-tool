@@ -117,12 +117,11 @@ def parse_scn(fpath, res):
     return groups, vbus_dict, markers
 
 def gen_rc(groups, vbus_dict, markers, res):
-    """Generates a Verdi RC file. Uses wvSetGroupAttributes for background colors."""
+    """Generates a Verdi RC file. Uses addGroup -color for background colors."""
     L = []
     def w(s=''): L.append(s)
 
     w("# Verdi Signal Save File")
-    w("set win $_nWave1")
     w()
 
     # -- Global Renames (Aliases) must come first ------------------------------
@@ -147,12 +146,12 @@ def gen_rc(groups, vbus_dict, markers, res):
 
     # -- Signal Groups ---------------------------------------------------------
     for g in groups:
-        w('addGroup "{}"'.format(g.name))
-        
-        # Set Group Background Color separately for better compatibility
+        # Use -color flag within addGroup for background color in RC context
+        color_opt = ""
         if g.color and g.color.lower() in COLOR_MAP:
-            bg_id = COLOR_MAP[g.color.lower()]
-            w('wvSetGroupAttributes -win $win -name "{}" -backgroundcolor {}'.format(g.name, bg_id))
+            color_opt = "-color {} ".format(COLOR_MAP[g.color.lower()])
+            
+        w('addGroup {}"{}"'.format(color_opt, g.name))
             
         for sig in g.sigs:
             opts = []
