@@ -142,7 +142,11 @@ def gen_rc(groups, vbus_dict, markers, res):
 
     # -- Signal Groups ---------------------------------------------------------
     for g in groups:
-        w('addGroup "{}"'.format(g.name))
+        bg_opt = ""
+        if g.color and g.color.lower() in COLOR_MAP:
+            bg_opt = "-bg {} ".format(COLOR_MAP[g.color.lower()])
+            
+        w('addGroup {}"{}"'.format(bg_opt, g.name))
         for sig in g.sigs:
             opts = []
             
