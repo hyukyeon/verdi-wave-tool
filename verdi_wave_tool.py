@@ -358,6 +358,8 @@ def gen_tcl(fsdb: str, clk_sig: str, scenarios: List[Scenario]) -> str:
         f"# {'='*62}", "",
         f"set report_dir {{{str(OUT_DIR)}}}",
         f"set fsdb_file  {{{fsdb}}}", "",
+        f"# Load signal layout RC",
+        f"source \"{RC_FILE}\"", "",
         f"# Clock period (ps) - auto-detect, fallback to 1000 ps (1 ns)",
         f"if {{[catch {{set clk_period [nwGetClockPeriod {{{clk_sig}}}]}}]}} {{",
         f"    set clk_period 1000",
@@ -616,7 +618,6 @@ def main():
     TCL_FILE.write_text(gen_tcl(fsdb, clk_sig, scenarios))
 
     launch_cmd = (f"verdi -ssf {fsdb}"
-                  f" -rcFile {RC_FILE}"
                   f" -play {TCL_FILE}")
 
     print(f"[+] sim      : {sim_name}")
