@@ -150,9 +150,9 @@ def gen_rc(groups, vbus_dict, markers, res):
             elif sig.radix.lower() in ['hex', 'bin', 'dec', 'oct']:
                 opts.append("-{}".format(sig.radix.upper()))
             
-            # Alias
+            # Alias (Display Name)
             if sig.alias:
-                opts.append("-alias \"{}\"".format(sig.alias))
+                opts.append("-name \"{}\"".format(sig.alias))
 
             # Check if it's a Virtual Bus
             if sig.path in vbus_dict:
