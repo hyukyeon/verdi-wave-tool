@@ -14,6 +14,7 @@ BASE_FILE  = CFG_DIR / "scn_base.lst"
 # -- Data Structures -----------------------------------------------------------
 Group  = namedtuple('Group', ['num', 'name', 'color', 'sigs'])
 Signal = namedtuple('Signal', ['path', 'radix', 'color', 'height', 'alias'])
+Marker = namedtuple('Marker', ['time', 'name', 'color'])
 
 # -- Core Logic ----------------------------------------------------------------
 
@@ -55,22 +56,13 @@ def parse_base(fpath):
         elif curr and '=' in line:
             k, v = line.split('=', 1)
             envs[curr][k.strip()] = v.strip()
-    
-    # Recursive resolution within base
-    for e in envs.values():
-        changed = True
-        while changed:
-            changed = False
-            for k, v in e.items():
-                for k2, v2 in e.items():
-                    if k != k2 and v.startswith(k2 + '.'):
-                        e[k] = v.replace(k2 + '.', v2 + '.', 1)
-                        changed = True
     return envs
 
 def parse_scn(fpath, res):
-    """Parses config/scn_*.lst, keeping only [GROUPS]."""
+    """Parses config/scn_*.lst with GROUPS, VIRTUAL_BUSES, and MARKERS."""
     groups = []
+    vbus_dict = {}
+    markers = []
     curr_section = None
     lines = fpath.read_text().splitlines()
     
@@ -85,107 +77,122 @@ def parse_scn(fpath, res):
         if curr_section == 'GROUPS':
             parts = re.split(r'\s+', raw)
             idx = parts[0]
-            if idx.endswith('.'): # Group header: "1.  NAME  [color]"
+            if idx.endswith('.'): # Group header
                 num = idx[:-1]
                 name = parts[1]
                 color = parts[2] if len(parts) > 2 else ""
                 groups.append(Group(num, name, color, []))
-            else: # Signal: "1.1  path  radix  color  [height]  [alias]"
+            else: # Signal
                 if not groups: continue
-                path = res.r(parts[1])
+                path = parts[1] # Keep raw for VBUS check
                 radix = parts[2]
                 color = parts[3] if len(parts) > 3 and parts[3] != '-' else ""
                 height = parts[4] if len(parts) > 4 and parts[4].isdigit() else ""
                 alias = parts[5] if len(parts) > 5 else (parts[4] if len(parts) > 4 and not parts[4].isdigit() else "")
                 groups[-1].sigs.append(Signal(path, radix, color, height, alias))
                 
-    return groups
+        elif curr_section == 'VIRTUAL_BUSES':
+            if '=' in raw:
+                name, sigs_str = raw.split('=', 1)
+                sigs = [res.r(s.strip()) for s in sigs_str.split(',')]
+                vbus_dict[name.strip()] = sigs
 
-def gen_rc(groups):
-    """Generates a Verdi RC (Signal Save) file."""
+        elif curr_section == 'MARKERS':
+            parts = re.split(r'\s+', raw)
+            if len(parts) >= 2:
+                time = parts[0]
+                name = parts[1]
+                color = parts[2] if len(parts) > 2 else "white"
+                markers.append(Marker(time, name, color))
+                
+    return groups, vbus_dict, markers
+
+def gen_rc(groups, vbus_dict, markers):
+    """Generates a Verdi RC (Signal Save) file with advanced features."""
     L = []
     def w(s=''): L.append(s)
 
     w("# Verdi Signal Save File")
     w()
 
+    # -- Markers ---------------------------------------------------------------
+    for m in markers:
+        w('addMarker -time {} -name "{}" -color {}'.format(m.time, m.name, m.color.upper()))
+    w()
+
+    # -- Signal Groups ---------------------------------------------------------
     for g in groups:
         w('addGroup "{}"'.format(g.name))
         for sig in g.sigs:
-            nwp = _nw(sig.path)
-            # RC syntax: addSignal -h <height> -C <color> <path>
-            opts = []
-            if sig.height: opts.append("-h {}".format(sig.height))
-            else:          opts.append("-h 15") # Default height
+            # Check if it's a Virtual Bus
+            if sig.path in vbus_dict:
+                bus_name = sig.alias if sig.alias else sig.path
+                w('addBus -name "{}"'.format(bus_name))
+                for bsig in vbus_dict[sig.path]:
+                    w('  addBusSignal {}'.format(_nw(bsig)))
+                
+                # Bus attributes
+                nwp = bus_name # VBus uses name for radix/color
+                if sig.radix and sig.radix != 'analog':
+                    w('setRadix -{} {}'.format(sig.radix.lower(), nwp))
+                if sig.color:
+                    w('setSignal -win $_nWave1 -color {} {}'.format(sig.color.upper(), nwp))
             
-            if sig.color:  opts.append("-C {}".format(sig.color.upper()))
-            
-            w('addSignal {} {}'.format(" ".join(opts), nwp))
-            
-            # Radix: setRadix -<format> <path>
-            if sig.radix:
-                fmt = sig.radix.lower()
-                if fmt == 'hex':   w('setRadix -hex {}'.format(nwp))
-                elif fmt == 'bin': w('setRadix -bin {}'.format(nwp))
-                elif fmt == 'dec': w('setRadix -dec {}'.format(nwp))
-                elif fmt == 'oct': w('setRadix -oct {}'.format(nwp))
-            
-            # Alias: setAlias -name "<alias>" <path>
-            if sig.alias:
-                w('setAlias -name "{}" {}'.format(sig.alias, nwp))
+            else:
+                # Normal signal or Analog
+                resolved_path = _nw(res.r(sig.path))
+                opts = []
+                if sig.height:  opts.append("-h {}".format(sig.height))
+                else:           opts.append("-h 15")
+                
+                if sig.color:   opts.append("-C {}".format(sig.color.upper()))
+                if sig.radix == 'analog': opts.append("-analog")
+                
+                w('addSignal {} {}'.format(" ".join(opts), resolved_path))
+                
+                if sig.radix and sig.radix != 'analog':
+                    w('setRadix -{} {}'.format(sig.radix.lower(), resolved_path))
+                
+                if sig.alias:
+                    w('setAlias -name "{}" {}'.format(sig.alias, resolved_path))
         w()
     
     return '\n'.join(L)
 
-def list_scenarios():
-    scns = sorted([f.stem.replace('scn_', '') for f in CFG_DIR.glob('scn_*.lst') if f.stem != 'scn_base'])
-    print("Available scenarios (config/scn_*.lst):")
-    for s in scns:
-        print("  {}".format(s))
-    sys.exit(0)
-
-def list_bases():
-    envs = parse_base(BASE_FILE)
-    print("BASE environments (config/scn_base.lst):")
-    for name in sorted(envs):
-        print("  {}".format(name))
-    sys.exit(0)
-
 def main():
-    ap = argparse.ArgumentParser(description="Verdi Signal RC Generator")
+    ap = argparse.ArgumentParser(description="Verdi Advanced RC Generator")
     ap.add_argument("-s", "--scenario", help="Scenario name")
     ap.add_argument("-b", "--base",     help="BASE env name")
-    ap.add_argument("--regen",      action="store_true", help="Force regenerate RC even if it exists")
+    ap.add_argument("--regen",      action="store_true", help="Force regenerate RC")
     ap.add_argument("--list",       action="store_true", help="List scenarios")
     ap.add_argument("--list-base",  action="store_true", help="List BASE envs")
     args = ap.parse_args()
 
-    if args.list: list_scenarios()
-    if args.list_base: list_bases()
-    if not args.scenario or not args.base:
-        ap.error("-s and -b are required")
+    if args.list: 
+        scns = sorted([f.stem.replace('scn_', '') for f in CFG_DIR.glob('scn_*.lst') if f.stem != 'scn_base'])
+        print("Scenarios:"); [print("  "+s) for s in scns]; sys.exit(0)
+    if args.list_base: 
+        envs = parse_base(BASE_FILE); print("Bases:"); [print("  "+e) for e in envs]; sys.exit(0)
 
-    scn_name = args.scenario
-    base_name = args.base
+    if not args.scenario or not args.base: ap.error("-s and -b required")
 
     base_envs = parse_base(BASE_FILE)
-    if base_name not in base_envs:
-        sys.exit("[!] BASE '{}' not found".format(base_name))
+    if args.base not in base_envs: sys.exit("[!] BASE '{}' not found".format(args.base))
 
-    scn_file = CFG_DIR / "scn_{}.lst".format(scn_name)
-    if not scn_file.exists():
-        sys.exit("[!] Scenario file not found: {}".format(scn_file))
+    scn_file = CFG_DIR / "scn_{}.lst".format(args.scenario)
+    if not scn_file.exists(): sys.exit("[!] Scenario file not found: {}".format(scn_file))
 
     OUT_DIR.mkdir(exist_ok=True)
-    rc_file = OUT_DIR / "{}_{}.rc".format(base_name, scn_name)
+    rc_file = OUT_DIR / "{}_{}.rc".format(args.base, args.scenario)
 
-    # Default is reuse, only regenerate if --regen is passed or file doesn't exist
+    global res # Needed in gen_rc for normal signal path resolution
+    res = Resolver(base_envs[args.base])
+
     if rc_file.exists() and not args.regen:
         print("[+] Using existing RC: {}".format(rc_file))
     else:
-        res = Resolver(base_envs[base_name])
-        groups = parse_scn(scn_file, res)
-        rc_file.write_text(gen_rc(groups))
+        groups, vbus_dict, markers = parse_scn(scn_file, res)
+        rc_file.write_text(gen_rc(groups, vbus_dict, markers))
         print("[+] Generated RC : {}".format(rc_file))
 
 if __name__ == "__main__":

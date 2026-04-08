@@ -1,0 +1,25 @@
+# scn_example.lst - Advanced RC Features Example
+
+[GROUPS]
+1.     TIMING          gray
+1.1    clk             bin    gray
+1.2    rst             bin    gray
+
+2.     ANALOG_DATA     lightcyan
+# 필드: N.M  path  radix(또는 analog)  color  height  alias
+2.1    top.tx_iq_i     analog              cyan   80      TX_I_WAVE
+2.2    top.tx_iq_q     analog              green  80      TX_Q_WAVE
+
+3.     STATUS_BUS      yellow
+# 가상 버스는 [VIRTUAL_BUSES] 섹션에서 정의한 이름을 사용합니다.
+3.1    VBUS_STATE      hex                 yellow 30      SYS_STATE
+
+[VIRTUAL_BUSES]
+# 형식: 이름  =  신호1, 신호2, ... (LBS 순서로 나열)
+VBUS_STATE  =  top.state_bit[2], top.state_bit[1], top.state_bit[0]
+
+[MARKERS]
+# 형식: 시간(ps)  이름  색상
+1000000    SIM_START     white
+5500000    INTERRUPT_1   red
+12000000   END_OF_INIT   yellow
