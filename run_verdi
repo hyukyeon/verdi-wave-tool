@@ -3,16 +3,40 @@
 # Usage: run_verdi <SCN> <BASE> <DUMP> [--regen]
 
 set -e
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+TOOL="$SCRIPT_DIR/verdi_wave_tool.py"
 
+# Function to show help and lists
+show_info() {
+    echo "Verdi Signal Layout Automation Tool"
+    echo "=================================="
+    echo "Usage: $(basename "$0") <SCN> <BASE> <DUMP> [--regen]"
+    echo ""
+    echo "Arguments:"
+    echo "  SCN    Scenario name (from config/scn_*.lst)"
+    echo "  BASE   Environment name (from config/scn_base.lst)"
+    echo "  DUMP   FSDB file path"
+    echo "  --regen (Optional) Force regenerate RC even if it exists"
+    echo ""
+    echo "Options:"
+    echo "  --list, -l      List all available Scenarios and BASEs"
+    echo "  --help, -h      Show this help message"
+    echo ""
+    python3 "$TOOL" --list
+    echo ""
+    python3 "$TOOL" --list-base
+}
+
+# Handle --list or --help
+if [[ "$1" == "--list" ]] || [[ "$1" == "-l" ]] || [[ "$1" == "--help" ]] || [[ "$1" == "-h" ]] || [ $# -eq 0 ]; then
+    show_info
+    exit 0
+fi
+
+# Basic validation for mandatory 3 arguments (SCN BASE DUMP)
 if [ $# -lt 3 ]; then
-    echo "Usage: run_verdi <SCN> <BASE> <DUMP> [--regen]"
-    echo ""
-    echo "  SCN   scenario name  (e.g. lte_crs)"
-    echo "  BASE  env name       (e.g. topsim_lte)"
-    echo "  DUMP  FSDB file path"
-    echo ""
-    echo "Available scenarios:"
-    python3 "$(dirname "$0")/verdi_wave_tool.py" --list
+    echo "[!] Error: Missing arguments."
+    echo "Usage: $(basename "$0") <SCN> <BASE> <DUMP> [--regen]"
     exit 1
 fi
 
@@ -21,14 +45,14 @@ BASE="$2"
 DUMP="$3"
 REGEN="${4:-}"
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-
-# Generate or Reuse RC file
-# FSDB is NOT passed to the generator anymore
-python3 "$SCRIPT_DIR/verdi_wave_tool.py" \
-    -s "$SCN" -b "$BASE" $REGEN
+# Generate or Reuse RC file (FSDB is not passed to the generator)
+python3 "$TOOL" -s "$SCN" -b "$BASE" $REGEN
 
 RC="$SCRIPT_DIR/output/${BASE}_${SCN}.rc"
+
+if [ ! -f "$DUMP" ]; then
+    echo "[!] Warning: FSDB file not found: $DUMP"
+fi
 
 echo ""
 echo "Launching: verdi -ssf $DUMP -sswr $RC"
