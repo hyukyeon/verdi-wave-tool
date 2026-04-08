@@ -619,8 +619,8 @@ def main():
     ap.add_argument("-s", "--scenario", help="Scenario name (e.g. lte_crs)")
     ap.add_argument("-b", "--base",     help="BASE env name from scn_base.lst")
     ap.add_argument("-f", "--fsdb",     help="FSDB dump file path")
-    ap.add_argument("--regen",      action="store_true",
-                    help="Force regenerate TCL even if it already exists")
+    ap.add_argument("--reuse",      action="store_true",
+                    help="Reuse existing TCL if it exists (skip regeneration)")
     ap.add_argument("--list",       action="store_true", help="List scenarios")
     ap.add_argument("--list-base",  action="store_true", help="List BASE envs")
     args = ap.parse_args()
@@ -654,7 +654,7 @@ def main():
     OUT_DIR.mkdir(exist_ok=True)
     tcl_file = OUT_DIR / "{}_{}.tcl".format(base_name, scn_name)
 
-    if tcl_file.exists() and not args.regen:
+    if tcl_file.exists() and args.reuse:
         print("[+] Using existing TCL: {}".format(tcl_file))
     else:
         res = Resolver(base_envs[base_name])
