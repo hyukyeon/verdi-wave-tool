@@ -302,13 +302,14 @@ def gen_tcl(fsdb, base_name, scn_name, clk_sig, groups, exprs, scenarios, out_di
     w("# Signal Layout")
     w("# {}".format('='*62))
     w()
+    w("# Open nWave window before adding signals")
+    w("wvOpenWindow")
+    w()
 
     for g in groups:
-        bg = " -backgroundcolor {}".format(g.color) if g.color else ""
         w("# {}".format('-'*62))
         w("# {}.  {}".format(g.num, g.name))
         w("# {}".format('-'*62))
-        w("wvSetGroupBegin -name {{{}}}{}".format(g.name, bg))
         for sig in g.sigs:
             w("wvAddSignal {{{}}}".format(sig.path))
             w("wvSetSignalRadix -radix {} {{{}}}".format(sig.radix, sig.path))
@@ -318,18 +319,15 @@ def gen_tcl(fsdb, base_name, scn_name, clk_sig, groups, exprs, scenarios, out_di
                 w("wvSetSignalHeight -height {} {{{}}}".format(sig.height, sig.path))
             if sig.alias:
                 w("wvSetSignalAlias -alias {{{}}} {{{}}}".format(sig.alias, sig.path))
-        w("wvSetGroupEnd")
         w()
 
     if exprs:
         w("# {}".format('-'*62))
         w("# EXPRESSIONS")
         w("# {}".format('-'*62))
-        w("wvSetGroupBegin -name {EXPRESSIONS} -backgroundcolor pink")
         for e in exprs:
             w("wvAddExprSignal -name {{{}}} -color {} -expr {{{}}}".format(
                 e.alias, e.color, e.expr))
-        w("wvSetGroupEnd")
         w()
 
     w("wvZoomFit")
