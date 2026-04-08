@@ -328,9 +328,11 @@ def gen_tcl(fsdb, base_name, scn_name, clk_sig, groups, exprs, scenarios, out_di
     w("# {}".format('='*62))
     w()
     for g in groups:
+        bg = " -backgroundcolor {}".format(g.color) if g.color else ""
         w("# {}".format('-'*62))
         w("# {}.  {}".format(g.num, g.name))
         w("# {}".format('-'*62))
+        w("wvSetGroupBegin -name {{{}}}{}".format(g.name, bg))
         for sig in g.sigs:
             nwp = _nw(sig.path)
             w("wvAddSignal {{{}}}".format(nwp))
@@ -341,15 +343,20 @@ def gen_tcl(fsdb, base_name, scn_name, clk_sig, groups, exprs, scenarios, out_di
                 w("wvSetSignalHeight -height {} {{{}}}".format(sig.height, nwp))
             if sig.alias:
                 w("wvSetSignalAlias -alias {{{}}} {{{}}}".format(sig.alias, nwp))
+        w("wvSetGroupEnd")
+        w("wvAddBlankLine")
         w()
 
     if exprs:
         w("# {}".format('-'*62))
         w("# EXPRESSIONS")
         w("# {}".format('-'*62))
+        w("wvSetGroupBegin -name {EXPRESSIONS} -backgroundcolor pink")
         for e in exprs:
             w("wvAddExprSignal -name {{{}}} -color {} -expr {{{}}}".format(
                 e.alias, e.color, _nw_expr(e.expr)))
+        w("wvSetGroupEnd")
+        w("wvAddBlankLine")
         w()
 
     w("wvZoomFit")
