@@ -1,7 +1,7 @@
 # verdi-wave-tool
 
 Verdi Signal Layout automation tool for LTE/NR waveform analysis.
-Generates a Verdi RC (Signal Save/Restore) file from a simple numbered list format, then launches Verdi with the signal layout pre-loaded.
+Generates a Verdi RC (Signal Save/Restore) file from a simple numbered list format, then launches Verdi with the signal layout and FSDB loaded.
 
 ---
 
@@ -32,11 +32,11 @@ output/
 # 1. List available scenarios and BASE environments
 ./run_verdi --list
 
-# 2. Generate RC and launch Verdi
+# 2. Launch Verdi (generates RC on first run, reuses it thereafter)
 ./run_verdi lte_crs topsim_lte /path/to/sim.fsdb
 
-# 3. Reuse existing RC (skip regeneration)
-./run_verdi lte_crs topsim_lte /path/to/sim.fsdb --reuse
+# 3. Force regenerate RC (if scenario/base config changed)
+./run_verdi lte_crs topsim_lte /path/to/sim.fsdb --regen
 ```
 
 The wrapper prints and runs:
@@ -93,11 +93,11 @@ Example:
 
 ---
 
-## Why use RC mode?
+## Key Features
 
-1. **Version Independence**: RC files use the standard Signal Save/Restore syntax, which is highly compatible across different Verdi versions.
-2. **Stability**: Avoids "invalid command" errors common with version-specific TCL commands like `wvSetSignalRadix`.
-3. **Speed**: Loading an RC file via `-sswr` is typically faster for large signal lists than executing TCL commands.
+1. **RC Reuse (Default)**: RC files are now independent of the FSDB path. Once an RC is generated for a `BASE+SCN` pair, it is reused for any simulation dump, making startup faster.
+2. **FSDB Loading**: FSDB is loaded directly via the `-ssf` CLI flag at launch.
+3. **Version Independence**: RC files use standard syntax compatible across Verdi versions.
 
 ---
 

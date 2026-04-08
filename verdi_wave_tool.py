@@ -155,8 +155,7 @@ def main():
     ap = argparse.ArgumentParser(description="Verdi Signal RC Generator")
     ap.add_argument("-s", "--scenario", help="Scenario name")
     ap.add_argument("-b", "--base",     help="BASE env name")
-    ap.add_argument("-f", "--fsdb",     help="FSDB path (not used in RC but for consistency)")
-    ap.add_argument("--reuse",      action="store_true", help="Reuse existing RC")
+    ap.add_argument("--regen",      action="store_true", help="Force regenerate RC even if it exists")
     ap.add_argument("--list",       action="store_true", help="List scenarios")
     ap.add_argument("--list-base",  action="store_true", help="List BASE envs")
     args = ap.parse_args()
@@ -180,7 +179,8 @@ def main():
     OUT_DIR.mkdir(exist_ok=True)
     rc_file = OUT_DIR / "{}_{}.rc".format(base_name, scn_name)
 
-    if rc_file.exists() and args.reuse:
+    # Default is reuse, only regenerate if --regen is passed or file doesn't exist
+    if rc_file.exists() and not args.regen:
         print("[+] Using existing RC: {}".format(rc_file))
     else:
         res = Resolver(base_envs[base_name])
