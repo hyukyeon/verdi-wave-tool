@@ -276,6 +276,31 @@ def parse_scn(path, res):
 
 
 # =============================================================================
+# Path format conversion
+# =============================================================================
+
+def _nw(path):
+    """Convert dot-notation path to nWave slash-notation with escaped brackets.
+    e.g. tb.u_top.sfn[9:0]  ->  /tb/u_top/sfn\\[9:0\\]
+    """
+    p = '/' + path.replace('.', '/')
+    p = p.replace('[', '\\[').replace(']', '\\]')
+    return p
+
+
+def _nw_expr(expr):
+    """Convert all dot-notation signal paths inside an expression string."""
+    # Match hierarchy paths: word chars + dots + optional brackets
+    def repl(m):
+        tok = m.group(0)
+        # Only convert if it looks like a hierarchy path (contains a dot)
+        if '.' in tok:
+            return _nw(tok)
+        return tok
+    return re.sub(r'[\w]+(?:\.[\w]+)+(?:\[[\d:]+\])?', repl, expr)
+
+
+# =============================================================================
 # TCL Generator  ->  output/<BASE>_<SCN>.tcl
 # =============================================================================
 
@@ -302,23 +327,20 @@ def gen_tcl(fsdb, base_name, scn_name, clk_sig, groups, exprs, scenarios, out_di
     w("# Signal Layout")
     w("# {}".format('='*62))
     w()
-    w("# Open nWave window before adding signals")
-    w("wvOpenWindow")
-    w()
-
     for g in groups:
         w("# {}".format('-'*62))
         w("# {}.  {}".format(g.num, g.name))
         w("# {}".format('-'*62))
         for sig in g.sigs:
-            w("wvAddSignal {{{}}}".format(sig.path))
-            w("wvSetSignalRadix -radix {} {{{}}}".format(sig.radix, sig.path))
+            nwp = _nw(sig.path)
+            w("wvAddSignal {{{}}}".format(nwp))
+            w("wvSetSignalRadix -radix {} {{{}}}".format(sig.radix, nwp))
             if sig.color:
-                w("wvSetSignalColor -color {} {{{}}}".format(sig.color, sig.path))
+                w("wvSetSignalColor -color {} {{{}}}".format(sig.color, nwp))
             if sig.height:
-                w("wvSetSignalHeight -height {} {{{}}}".format(sig.height, sig.path))
+                w("wvSetSignalHeight -height {} {{{}}}".format(sig.height, nwp))
             if sig.alias:
-                w("wvSetSignalAlias -alias {{{}}} {{{}}}".format(sig.alias, sig.path))
+                w("wvSetSignalAlias -alias {{{}}} {{{}}}".format(sig.alias, nwp))
         w()
 
     if exprs:
@@ -327,7 +349,7 @@ def gen_tcl(fsdb, base_name, scn_name, clk_sig, groups, exprs, scenarios, out_di
         w("# {}".format('-'*62))
         for e in exprs:
             w("wvAddExprSignal -name {{{}}} -color {} -expr {{{}}}".format(
-                e.alias, e.color, e.expr))
+                e.alias, e.color, _nw_expr(e.expr)))
         w()
 
     w("wvZoomFit")
@@ -339,7 +361,7 @@ def gen_tcl(fsdb, base_name, scn_name, clk_sig, groups, exprs, scenarios, out_di
     w("# {}".format('='*62))
     w()
     w("# Clock period (ps) - auto-detect, fallback to 1000 ps (1 ns)")
-    w("if {[catch {set clk_period [nwGetClockPeriod {" + clk_sig + "}]}]} {")
+    w("if {[catch {set clk_period [nwGetClockPeriod {" + _nw(clk_sig) + "}]}]} {")
     w("    set clk_period 1000")
     w("}")
     w()
@@ -430,9 +452,9 @@ def _scn_sfr_check(w, scn):
         lbl = sfr.rsplit('.', 1)[-1]
         w("puts $fd \"\"")
         w("puts $fd \"--- {} ---\"".format(lbl))
-        w("scan_changes {{{}}} {{{}_}}".format(sfr, lbl))
+        w("scan_changes {{{}}} {{{}_}}".format(_nw(sfr), lbl))
         w("set r [measure_latency {{{}}} {{{}}} {} $clk_period $fd]".format(
-            sfr, response, max_lat))
+            _nw(sfr), _nw(response), max_lat))
         w("puts $fd \"  -> [lindex $r 0] OK  [lindex $r 1] FAIL\"")
     w("close $fd")
     w("puts \"{} sfr-check -> {}\"".format(scn.num, rpt))
@@ -447,7 +469,7 @@ def _scn_timing(w, scn):
     w("puts $fd \"Timing {} - [clock format [clock seconds]]\"".format(scn.num))
     w("puts $fd \"reference : {}\"".format(ref))
     w("puts $fd \"{}\"".format('='*60))
-    w("set t_ref [nwSearchNext -signal {{{}}} -type rising_edge \\".format(ref))
+    w("set t_ref [nwSearchNext -signal {{{}}} -type rising_edge \\".format(_nw(ref)))
     w("                        -from [nwGetMinTime]]")
     w("if {$t_ref eq {}} {")
     w("    puts $fd \"  [WARN] reference signal has no rising edge\"")
@@ -457,7 +479,7 @@ def _scn_timing(w, scn):
     w("    puts $fd \"\"")
     for cmp in cmps:
         lbl = cmp.rsplit('.', 1)[-1]
-        w("    set t_c [nwSearchNext -signal {{{}}} -type rising_edge \\".format(cmp))
+        w("    set t_c [nwSearchNext -signal {{{}}} -type rising_edge \\".format(_nw(cmp)))
         w("                         -from [nwGetMinTime]]")
         w("    if {$t_c ne {}} {")
         w("        set d [expr {$t_c - $t_ref}]")
@@ -485,7 +507,7 @@ def _scn_edge_count(w, scn):
     for sig in sigs:
         lbl = sig.rsplit('.', 1)[-1]
         w("puts $fd [format \"  %-54s %d\" {{{}}} [count_edges {{{}}} {}]]".format(
-            lbl, sig, edge))
+            lbl, _nw(sig), edge))
     w("close $fd")
     w("puts \"{} edge-count -> {}\"".format(scn.num, rpt))
 
