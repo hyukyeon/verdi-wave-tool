@@ -1,5 +1,5 @@
 # =============================================================================
-# scn_lte_crs.lst — TopSim LTE CRS Debug Scenario
+# scn_lte_crs.lst -- TopSim LTE CRS Debug Scenario
 # =============================================================================
 # Purpose: Verify LTE Cell-specific Reference Signal (CRS) behavior
 #          SFR write -> CRS output timing / PDSCH-PDCCH alignment / symbol mask

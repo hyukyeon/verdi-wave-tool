@@ -1,5 +1,5 @@
 # =============================================================================
-# scn_base.lst — Simulation Environment Hierarchy
+# scn_base.lst -- Simulation Environment Hierarchy
 # =============================================================================
 # Each [section] defines one simulation environment.
 # Referenced from scn_*.lst via:  [BASE]  sim = <section_name>
@@ -9,7 +9,7 @@
 #   clk    Clock signal (full path)
 #   rst    Reset signal (full path, active-low)
 #   sfr    SFR base path (full path)
-#   frame  SFN / frame counter — may use top. prefix
+#   frame  SFN / frame counter -- may use top. prefix
 #   subfrm Subframe counter
 #   slot   Slot counter
 #   sym    Symbol counter
@@ -23,7 +23,7 @@
 # =============================================================================
 
 # -----------------------------------------------------------------------------
-# TopSim — LTE full-system simulation
+# TopSim -- LTE full-system simulation
 # -----------------------------------------------------------------------------
 [topsim_lte]
 top    = tb.u_top.u_lte_bb
@@ -36,7 +36,7 @@ slot   = top.slot_cnt[0]
 sym    = top.sym_cnt[3:0]
 
 # -----------------------------------------------------------------------------
-# BlockSim — NR SSB block-level simulation
+# BlockSim -- NR SSB block-level simulation
 # -----------------------------------------------------------------------------
 [blocksim_nr_ssb]
 top    = tb.u_ssb_top

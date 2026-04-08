@@ -1,5 +1,5 @@
 # =============================================================================
-# scn_nr_ssb.lst — BlockSim NR SSB Debug Scenario
+# scn_nr_ssb.lst -- BlockSim NR SSB Debug Scenario
 # =============================================================================
 # Purpose: Verify NR Synchronization Signal Block (SSB) behavior
 #          PSS/SSS/PBCH order and timing / SSB periodicity / beam sweep schedule

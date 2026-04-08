@@ -9,19 +9,19 @@ Generates a signal RC file and a TCL analysis script from a simple numbered list
 
 ```
 verdi-wave-tool/
-├── verdi_wave_tool.py        # Single entry point
-└── config/
-    ├── scn_base.lst          # Simulation environment hierarchy definitions
-    ├── scn_lte_crs.lst       # LTE CRS debug scenario
-    └── scn_nr_ssb.lst        # NR SSB debug scenario
++-- verdi_wave_tool.py        # Single entry point
++-- config/
+    +-- scn_base.lst          # Simulation environment hierarchy definitions
+    +-- scn_lte_crs.lst       # LTE CRS debug scenario
+    +-- scn_nr_ssb.lst        # NR SSB debug scenario
 ```
 
 **Generated output** (written to `./output/` at runtime, not tracked in git):
 
 ```
 output/
-├── signals.rc                # nWave signal RC  (groups / colors / radix / aliases)
-└── analysis.tcl              # nWave TCL script (helper procs + scenario runs)
++-- signals.rc                # nWave signal RC  (groups / colors / radix / aliases)
++-- analysis.tcl              # nWave TCL script (helper procs + scenario runs)
 ```
 
 ---
@@ -56,7 +56,7 @@ verdi -ssf sim.fsdb -rcFile output/signals.rc -play output/analysis.tcl
 
 ## Config File Format
 
-### `config/scn_base.lst` — Simulation environment hierarchy
+### `config/scn_base.lst` -- Simulation environment hierarchy
 
 Each `[section]` defines one sim environment.
 The scenario file references it with `sim = <section_name>` in its `[BASE]` block.
@@ -74,13 +74,13 @@ sym    = top.sym_cnt[3:0]
 ```
 
 **Path keywords** available in scenario files:
-`clk` `rst` `frame` `subfrm` `slot` `sym` → resolved to the values above
-`top.X` → `{top}.X`
-`sfr.X` → `{sfr}.X`
+`clk` `rst` `frame` `subfrm` `slot` `sym` -> resolved to the values above
+`top.X` -> `{top}.X`
+`sfr.X` -> `{sfr}.X`
 
 ---
 
-### `config/scn_*.lst` — Scenario definition
+### `config/scn_*.lst` -- Scenario definition
 
 A scenario file has four sections: `[BASE]`, `[GROUPS]`, `[EXPRESSIONS]`, `[SCENARIOS]`.
 
@@ -96,9 +96,9 @@ sim = topsim_lte        # must match a section name in scn_base.lst
 Numbered entries define the signal list displayed in nWave.
 
 ```
-# N.     GROUP_NAME    [bg_color]           ← group header
-# N.M    path          radix  color  [height]  [alias]   ← signal
-# N.M.K  path          radix  -      [height]  [alias]   ← sub-field (- = inherit group color)
+# N.     GROUP_NAME    [bg_color]           <- group header
+# N.M    path          radix  color  [height]  [alias]   <- signal
+# N.M.K  path          radix  -      [height]  [alias]   <- sub-field (- = inherit group color)
 ```
 
 Example:
@@ -154,7 +154,7 @@ Supported scenario types:
 | `frame-sync` | `standard`, `frame_ns`, `subfrm_ns`, `slot_ns`, `num_frames` | Places frame/subframe/slot boundary markers |
 
 Values for `watch`, `response`, `reference`, `compare`, and `signals`
-may be written as **group entry numbers** (`N.M`) — they are resolved to full signal paths automatically.
+may be written as **group entry numbers** (`N.M`) -- they are resolved to full signal paths automatically.
 
 Example:
 
@@ -173,29 +173,29 @@ S2.2   compare     = 4.2, 5.2
 
 ## Included Scenarios
 
-### `scn_lte_crs` — TopSim LTE CRS Debug
+### `scn_lte_crs` -- TopSim LTE CRS Debug
 
 | # | Scenario | What it checks |
 |---|----------|---------------|
-| S1 | sfr-check | SFR write (CRS_CFG, CHAN_CTRL, TIMING_CFG) → `crs_en` latency ≤ 8 cycles |
+| S1 | sfr-check | SFR write (CRS_CFG, CHAN_CTRL, TIMING_CFG) -> `crs_en` latency <= 8 cycles |
 | S2 | timing | First activation delta of `pdsch_dl_vld` and `pdcch_dl_vld` relative to `crs_en` |
 | S3 | edge-count | Rising edge count on `crs_vld`, `pdsch_dl_vld`, `pdcch_dl_vld` |
 | S4 | frame-sync | LTE frame (10 ms) / subframe (1 ms) / slot (0.5 ms) markers, 8 frames |
 
-Signal groups: **TIMING · SFR · CRS · PDSCH · PDCCH**
+Signal groups: **TIMING / SFR / CRS / PDSCH / PDCCH**
 
 ---
 
-### `scn_nr_ssb` — BlockSim NR SSB Debug
+### `scn_nr_ssb` -- BlockSim NR SSB Debug
 
 | # | Scenario | What it checks |
 |---|----------|---------------|
-| S1 | sfr-check | SFR write (SSB_CFG, CHAN_CTRL) → `ssb_en` latency ≤ 4 cycles |
+| S1 | sfr-check | SFR write (SSB_CFG, CHAN_CTRL) -> `ssb_en` latency <= 4 cycles |
 | S2 | timing | First-activation order of `pss_vld`, `sss_vld`, `pbch_vld` relative to `ssb_en` |
 | S3 | edge-count | Rising edge count on `ssb_vld`, `pss_vld`, `sss_vld`, `pbch_vld` |
-| S4 | frame-sync | NR frame (10 ms) / subframe (0.5 ms) / slot (0.25 ms, μ=1) markers, 20 frames |
+| S4 | frame-sync | NR frame (10 ms) / subframe (0.5 ms) / slot (0.25 ms, u=1) markers, 20 frames |
 
-Signal groups: **TIMING · SFR · SSB · PSS · SSS · PBCH · BEAM**
+Signal groups: **TIMING / SFR / SSB / PSS / SSS / PBCH / BEAM**
 
 ---
 
@@ -215,18 +215,18 @@ No changes to `verdi_wave_tool.py` are needed.
 ### `output/signals.rc`
 
 Pure Tcl sourced by nWave via `-rcFile`. Contains:
-- `debImport -sv4 {fsdb}` — loads the FSDB
-- `wvSetGroupBegin / wvAddSignal / wvSetSignalRadix / wvSetSignalColor / wvSetSignalAlias` — per group
-- `wvAddExprSignal` — for each expression
-- `wvZoomFit` — fits all signals in view on open
+- `debImport -sv4 {fsdb}` -- loads the FSDB
+- `wvSetGroupBegin / wvAddSignal / wvSetSignalRadix / wvSetSignalColor / wvSetSignalAlias` -- per group
+- `wvAddExprSignal` -- for each expression
+- `wvZoomFit` -- fits all signals in view on open
 
 ### `output/analysis.tcl`
 
 Tcl script sourced by nWave via `-play`. Contains:
-- `source output/signals.rc` — loads the RC
+- `source output/signals.rc` -- loads the RC
 - Auto-detect clock period (`nwGetClockPeriod`), fallback 1000 ps
 - Helper procs: `count_edges`, `scan_changes`, `measure_latency`
-- One block per scenario — runs sequentially, writes a `.txt` report to `output/`
+- One block per scenario -- runs sequentially, writes a `.txt` report to `output/`
 
 ---
 
