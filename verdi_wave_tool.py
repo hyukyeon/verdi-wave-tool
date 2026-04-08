@@ -16,6 +16,15 @@ Group  = namedtuple('Group', ['num', 'name', 'color', 'sigs'])
 Signal = namedtuple('Signal', ['path', 'radix', 'color', 'height', 'alias'])
 Marker = namedtuple('Marker', ['time', 'name', 'color'])
 
+# -- Color Mapping (Verdi ID style) --------------------------------------------
+COLOR_MAP = {
+    'red': 'ID_RED5', 'green': 'ID_GREEN5', 'blue': 'ID_BLUE5',
+    'yellow': 'ID_YELLOW5', 'cyan': 'ID_CYAN5', 'magenta': 'ID_MAGENTA5',
+    'white': 'ID_WHITE', 'black': 'ID_BLACK', 'gray': 'ID_GRAY5',
+    'orange': 'ID_ORANGE5', 'pink': 'ID_PINK5', 'brown': 'ID_BROWN5',
+    'purple': 'ID_PURPLE5',
+}
+
 # -- Core Logic ----------------------------------------------------------------
 
 class Resolver:
@@ -84,7 +93,7 @@ def parse_scn(fpath, res):
                 groups.append(Group(num, name, color, []))
             else: # Signal
                 if not groups: continue
-                path = parts[1] # Keep raw for VBUS check
+                path = parts[1]
                 radix = parts[2]
                 color = parts[3] if len(parts) > 3 and parts[3] != '-' else ""
                 height = parts[4] if len(parts) > 4 and parts[4].isdigit() else ""
@@ -107,8 +116,8 @@ def parse_scn(fpath, res):
                 
     return groups, vbus_dict, markers
 
-def gen_rc(groups, vbus_dict, markers):
-    """Generates a Verdi RC (Signal Save) file with advanced features."""
+def gen_rc(groups, vbus_dict, markers, res):
+    """Generates a Verdi RC file using single-line addSignal/addBus commands."""
     L = []
     def w(s=''): L.append(s)
 
@@ -124,37 +133,37 @@ def gen_rc(groups, vbus_dict, markers):
     for g in groups:
         w('addGroup "{}"'.format(g.name))
         for sig in g.sigs:
+            opts = []
+            
+            # Height
+            h = sig.height if sig.height else "15"
+            opts.append("-h {}".format(h))
+            
+            # Color
+            c = sig.color if sig.color else g.color
+            if c and c.lower() in COLOR_MAP:
+                opts.append("-color {}".format(COLOR_MAP[c.lower()]))
+            
+            # Radix
+            if sig.radix == 'analog':
+                opts.append("-analog")
+            elif sig.radix.lower() in ['hex', 'bin', 'dec', 'oct']:
+                opts.append("-{}".format(sig.radix.upper()))
+            
+            # Alias
+            if sig.alias:
+                opts.append("-alias \"{}\"".format(sig.alias))
+
             # Check if it's a Virtual Bus
             if sig.path in vbus_dict:
                 bus_name = sig.alias if sig.alias else sig.path
-                w('addBus -name "{}"'.format(bus_name))
+                w('addBus {} -name "{}"'.format(" ".join(opts), bus_name))
                 for bsig in vbus_dict[sig.path]:
                     w('  addBusSignal {}'.format(_nw(bsig)))
-                
-                # Bus attributes
-                nwp = bus_name # VBus uses name for radix/color
-                if sig.radix and sig.radix != 'analog':
-                    w('setRadix -{} {}'.format(sig.radix.lower(), nwp))
-                if sig.color:
-                    w('setSignal -win $_nWave1 -color {} {}'.format(sig.color.upper(), nwp))
-            
             else:
-                # Normal signal or Analog
+                # Normal signal
                 resolved_path = _nw(res.r(sig.path))
-                opts = []
-                if sig.height:  opts.append("-h {}".format(sig.height))
-                else:           opts.append("-h 15")
-                
-                if sig.color:   opts.append("-C {}".format(sig.color.upper()))
-                if sig.radix == 'analog': opts.append("-analog")
-                
                 w('addSignal {} {}'.format(" ".join(opts), resolved_path))
-                
-                if sig.radix and sig.radix != 'analog':
-                    w('setRadix -{} {}'.format(sig.radix.lower(), resolved_path))
-                
-                if sig.alias:
-                    w('setAlias -name "{}" {}'.format(sig.alias, resolved_path))
         w()
     
     return '\n'.join(L)
@@ -185,14 +194,13 @@ def main():
     OUT_DIR.mkdir(exist_ok=True)
     rc_file = OUT_DIR / "{}_{}.rc".format(args.base, args.scenario)
 
-    global res # Needed in gen_rc for normal signal path resolution
-    res = Resolver(base_envs[args.base])
+    env_res = Resolver(base_envs[args.base])
 
     if rc_file.exists() and not args.regen:
         print("[+] Using existing RC: {}".format(rc_file))
     else:
-        groups, vbus_dict, markers = parse_scn(scn_file, res)
-        rc_file.write_text(gen_rc(groups, vbus_dict, markers))
+        groups, vbus_dict, markers = parse_scn(scn_file, env_res)
+        rc_file.write_text(gen_rc(groups, vbus_dict, markers, env_res))
         print("[+] Generated RC : {}".format(rc_file))
 
 if __name__ == "__main__":

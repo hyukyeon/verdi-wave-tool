@@ -43,7 +43,7 @@ output/
 
 ## Config File Format (`config/scn_*.lst`)
 
-A scenario file can contain three sections: `[GROUPS]`, `[VIRTUAL_BUSES]`, and `[MARKERS]`.
+A scenario file can contain세 sections: `[GROUPS]`, `[VIRTUAL_BUSES]`, and `[MARKERS]`.
 
 ### 1. `[GROUPS]` - Main Signal List
 
@@ -73,46 +73,37 @@ VBUS_STATE  =  top.state[2], top.state[1], top.state[0]
 ## Reference: Supported Values
 
 ### 1. Radix (`radix/type`)
-- `hex`: Hexadecimal (Default for buses)
-- `bin`: Binary (Default for 1-bit)
+- `hex`: Hexadecimal
+- `bin`: Binary
 - `dec`: Decimal
 - `oct`: Octal
-- **`analog`**: Displays the signal as an analog waveform (Step/Linear)
+- **`analog`**: Displays the signal as an analog waveform
 
 ### 2. Colors (`color` / `bg_color`)
-Standard Verdi color names are supported:
-- **Primary**: `red`, `green`, `blue`, `yellow`, `cyan`, `magenta`, `white`, `black`
-- **Secondary**: `gray`, `orange`, `pink`, `brown`, `purple`
-- **Light Variants**: `lightyellow`, `lightcyan`, `lightgray`
-- **Inherit**: `-` (dash) in the signal color column inherits the group color.
+The tool maps these names to standard Verdi color IDs (e.g., `ID_RED5`):
+- `red`, `green`, `blue`, `yellow`, `cyan`, `magenta`, `white`, `black`
+- `gray`, `orange`, `pink`, `brown`, `purple`
 
 ### 3. Signal Height (`height`)
-- Integer value in pixels.
-- Default: `15`
-- Recommended for Analog: `80` ~ `120`
-- Recommended for Buses: `25` ~ `35`
-
-### 4. Font Configuration
-Fonts in Verdi are usually set via the global resource file or a TCL command.
-While individual signal font setting is less common in standard RC files, you can adjust the global display font in Verdi via:
-- `Tools -> Options -> Waveform -> Font`
-- Common values: `Arial 10`, `Courier 12`, `Fixed 10`
+- Integer value in pixels. (Default: `15`)
 
 ---
 
 ## Key Features
 
-1. **RC Reuse (Default)**: RC files are independent of the FSDB path. Startup is fast as long as the scenario config hasn't changed.
-2. **Analog Waveforms**: Simply set radix to `analog` to visualize IQ or filter data as graphs.
-3. **Virtual Buses**: Combine bits into buses without modifying RTL/Bench code.
-4. **Auto-Markers**: Navigate to key simulation events instantly using pre-placed markers.
+1. **RC Reuse (Default)**: RC files are independent of the FSDB path. Startup is fast.
+2. **Integrated Syntax**: Uses single-line `addSignal` commands for maximum compatibility.
+3. **Analog Waveforms**: Simply set radix to `analog` for IQ/Filter data.
+4. **Virtual Buses**: Combine bits into buses instantly.
 5. **Version Independence**: Uses standard RC syntax compatible across Verdi versions.
 
 ---
 
 ## Generated Output (`output/{BASE}_{SCN}.rc`)
 
-A standard Verdi Signal Save file containing:
-- `addGroup`, `addSignal`, `addBus`, `addBusSignal`
-- `setRadix`, `setAlias`, `addMarker`
-- Attributes like `-h` (height), `-C` (color), and `-analog`.
+A standard Verdi Signal Save file. Example:
+```tcl
+addSignal -h 15 -color ID_CYAN5 -HEX /top/dut/addr[31:0]
+addSignal -h 80 -color ID_GREEN5 -analog /top/dut/tx_iq_q
+addBus -h 30 -color ID_YELLOW5 -HEX -name "MY_BUS"
+```
