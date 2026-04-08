@@ -18,7 +18,6 @@ Verdi:
 import argparse, re, sys, subprocess
 from pathlib import Path
 from datetime import datetime
-from dataclasses import dataclass, field
 from typing import Optional, List, Dict
 
 BASE_DIR  = Path(__file__).parent
@@ -33,35 +32,35 @@ TCL_FILE  = OUT_DIR  / "analysis.tcl"
 # Data Models
 # =============================================================================
 
-@dataclass
 class Sig:
-    num:    str
-    path:   str
-    radix:  str           = "hex"
-    color:  str           = "cyan"
-    height: Optional[int] = None
-    alias:  Optional[str] = None
+    def __init__(self, num, path, radix="hex", color="cyan", height=None, alias=None):
+        self.num    = num
+        self.path   = path
+        self.radix  = radix
+        self.color  = color
+        self.height = height
+        self.alias  = alias
 
-@dataclass
 class Group:
-    num:   str
-    name:  str
-    color: Optional[str]  = None     # group background + default waveform color
-    sigs:  List[Sig]      = field(default_factory=list)
+    def __init__(self, num, name, color=None):
+        self.num   = num
+        self.name  = name
+        self.color = color   # group background + default waveform color
+        self.sigs  = []      # type: List[Sig]
 
-@dataclass
 class Expr:
-    num:   str
-    expr:  str
-    radix: str = "bin"
-    color: str = "red"
-    alias: str = ""
+    def __init__(self, num, expr, radix="bin", color="red", alias=""):
+        self.num   = num
+        self.expr  = expr
+        self.radix = radix
+        self.color = color
+        self.alias = alias
 
-@dataclass
 class Scenario:
-    num:    str
-    type:   str
-    params: Dict[str, str] = field(default_factory=dict)
+    def __init__(self, num, type_):
+        self.num    = num
+        self.type   = type_
+        self.params = {}     # type: Dict[str, str]
 
 
 # =============================================================================
@@ -278,7 +277,7 @@ def parse_scn(path: Path, res: Resolver):
 
             m = _RSH.match(s)
             if m:                                           # S1  type
-                cur_s = Scenario(num=m.group(1), type=m.group(2).strip())
+                cur_s = Scenario(num=m.group(1), type_=m.group(2).strip())
                 scenarios.append(cur_s)
 
     return sim, groups, exprs, scenarios, idx
