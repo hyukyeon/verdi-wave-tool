@@ -1,18 +1,19 @@
 #!/usr/bin/env python3
 """
 verdi_wave_tool.py - Verdi nWave LTE/NR Waveform Analysis Tool
-==============================================================
-Config  ./config/scn_base.lst   sim environment hierarchy
-        ./config/scn_*.lst      signal groups + scenario definitions
-Output  ./output/signals.rc     nWave signal RC
-        ./output/analysis.tcl   nWave TCL analysis script
+===============================================================
+Config  ./config/scn_base.lst       sim environment hierarchy
+        ./config/scn_<NAME>.lst     signal groups + scenario definitions
+
+Output  ./output/<BASE>_<SCN>.tcl   combined nWave TCL (signal layout + analysis)
 
 Usage:
-  python3 verdi_wave_tool.py -f sim.fsdb -s scn_lte_crs [--launch]
+  python3 verdi_wave_tool.py -s lte_crs -b topsim_lte -f sim.fsdb
   python3 verdi_wave_tool.py --list
+  python3 verdi_wave_tool.py --list-base
 
 Verdi:
-  verdi -ssf sim.fsdb -rcFile output/signals.rc -play output/analysis.tcl
+  verdi -ssf sim.fsdb -play output/topsim_lte_lte_crs.tcl
 """
 
 import argparse, re, sys, subprocess
@@ -24,8 +25,6 @@ BASE_DIR  = Path(__file__).parent
 CFG_DIR   = BASE_DIR / "config"
 OUT_DIR   = BASE_DIR / "output"
 BASE_FILE = CFG_DIR  / "scn_base.lst"
-RC_FILE   = OUT_DIR  / "signals.rc"
-TCL_FILE  = OUT_DIR  / "analysis.tcl"
 
 
 # =============================================================================
@@ -45,7 +44,7 @@ class Group:
     def __init__(self, num, name, color=None):
         self.num   = num
         self.name  = name
-        self.color = color   # group background + default waveform color
+        self.color = color
         self.sigs  = []      # type: List[Sig]
 
 class Expr:
@@ -67,9 +66,10 @@ class Scenario:
 # scn_base.lst Parser
 # =============================================================================
 
-def parse_base(path: Path) -> Dict[str, Dict[str, str]]:
+def parse_base(path):
+    # type: (Path) -> Dict[str, Dict[str, str]]
     """Parse  [env_name]  key = value  blocks -> {env: {key: val}}"""
-    envs: Dict[str, Dict] = {}
+    envs = {}
     cur = None
     for raw in open(path):
         line = raw.split('#')[0].strip()
@@ -105,26 +105,26 @@ class Resolver:
       e.g. tb.dut.ABC  ->  tb.dut.ABC     (safe even if ABC is an env key)
     """
 
-    def __init__(self, env: Dict[str, str]):
+    def __init__(self, env):
+        # type: (Dict[str, str]) -> None
         self.env = env
-        # Sort longest-first so longer keys take precedence over shorter prefixes
         self._keys = sorted(env.keys(), key=len, reverse=True)
 
-    def r(self, p: str) -> str:
+    def r(self, p):
+        # type: (str) -> str
         p = p.strip()
-        # Exact match: the whole token is an env key
         if p in self.env:
             val = self.env[p]
             return self.r(val) if val != p else p
-        # Prefix match: first dot-separated component is an env key
         dot = p.find('.')
         if dot > 0:
             prefix = p[:dot]
             if prefix in self.env:
-                return f"{self.r(self.env[prefix])}.{p[dot+1:]}"
+                return "{}.{}".format(self.r(self.env[prefix]), p[dot+1:])
         return p
 
-    def expr(self, s: str) -> str:
+    def expr(self, s):
+        # type: (str) -> str
         """Resolve env-key-prefixed tokens inside an expression string."""
         for key in self._keys:
             pat = re.escape(key) + r'\.[\w\[\]:.]+'
@@ -152,20 +152,19 @@ class Resolver:
 # Signal path columns: path  radix  color  [height|alias ...]
 # color '-' inherits from the parent group color.
 
-_RG   = re.compile(r'^(\d+)\.\s+(.*)')               # group header
-_RS   = re.compile(r'^(\d+)\.(\d+)\s+(.*)')           # signal entry
-_RSF  = re.compile(r'^(\d+)\.(\d+)\.(\d+)\s+(.*)')    # sub-field entry
-_RSP  = re.compile(r'^(S\d+\.\d+)\s+(.*)')            # scenario param
-_RSH  = re.compile(r'^(S\d+)\s+(.*)')                 # scenario header
-_RE   = re.compile(r'^(E\d+)\s+(.*)')                 # expression
+_RG  = re.compile(r'^(\d+)\.\s+(.*)')
+_RS  = re.compile(r'^(\d+)\.(\d+)\s+(.*)')
+_RSF = re.compile(r'^(\d+)\.(\d+)\.(\d+)\s+(.*)')
+_RSP = re.compile(r'^(S\d+\.\d+)\s+(.*)')
+_RSH = re.compile(r'^(S\d+)\s+(.*)')
+_RE  = re.compile(r'^(E\d+)\s+(.*)')
 
 
-def _mk_sig(num: str, rest: str, gc: Optional[str]) -> Sig:
-    """Build Sig from 'path radix color [height] [alias]' token string."""
-    cols  = rest.split()
-    path  = cols[0] if cols else ''
-    radix = cols[1] if len(cols) > 1 else 'hex'
-    color = cols[2] if len(cols) > 2 else '-'
+def _mk_sig(num, rest, gc):
+    cols   = rest.split()
+    path   = cols[0] if cols else ''
+    radix  = cols[1] if len(cols) > 1 else 'hex'
+    color  = cols[2] if len(cols) > 2 else '-'
     height, alias = None, None
     if len(cols) > 3:
         if cols[3].lstrip('-').isdigit():
@@ -179,20 +178,19 @@ def _mk_sig(num: str, rest: str, gc: Optional[str]) -> Sig:
                height=height, alias=alias)
 
 
-def parse_scn(path: Path, res: Resolver):
+def parse_scn(path, res):
     """
-    Parse scn_*.lst.
-    Returns (sim_name, groups, exprs, scenarios, sig_index).
-    sig_index maps "N.M" -> Sig for scenario reference resolution.
+    Parse scn_*.lst (no [BASE] section).
+    Returns (groups, exprs, scenarios, sig_index).
+    sig_index maps 'N.M' -> Sig for scenario reference resolution.
     """
-    sim                        = ''
-    groups:    List[Group]     = []
-    exprs:     List[Expr]      = []
-    scenarios: List[Scenario]  = []
-    idx:       Dict[str, Sig]  = {}
-    cur_g: Optional[Group]     = None
-    cur_s: Optional[Scenario]  = None
-    section                    = ''
+    groups    = []   # type: List[Group]
+    exprs     = []   # type: List[Expr]
+    scenarios = []   # type: List[Scenario]
+    idx       = {}   # type: Dict[str, Sig]
+    cur_g     = None # type: Optional[Group]
+    cur_s     = None # type: Optional[Scenario]
+    section   = ''
 
     for raw in open(path):
         line = raw.split('#')[0].rstrip()
@@ -204,38 +202,33 @@ def parse_scn(path: Path, res: Resolver):
             section = m.group(1)
             continue
 
-        # -- [BASE] ----------------------------------------------------------
-        if section == 'BASE':
-            if '=' in s:
-                k, _, v = s.partition('=')
-                if k.strip() == 'sim':
-                    sim = v.strip()
-
         # -- [GROUPS] --------------------------------------------------------
-        elif section == 'GROUPS':
+        if section == 'GROUPS':
             m = _RSF.match(s)
-            if m:                                           # N.M.K  sub-field
-                num = f"{m.group(1)}.{m.group(2)}.{m.group(3)}"
+            if m:
+                num = "{}.{}.{}".format(m.group(1), m.group(2), m.group(3))
                 sig = _mk_sig(num, m.group(4), cur_g.color if cur_g else None)
                 sig.path = res.r(sig.path)
-                if cur_g: cur_g.sigs.append(sig)
+                if cur_g:
+                    cur_g.sigs.append(sig)
                 idx[num] = sig
                 continue
 
             m = _RS.match(s)
-            if m:                                           # N.M    signal
-                num = f"{m.group(1)}.{m.group(2)}"
+            if m:
+                num = "{}.{}".format(m.group(1), m.group(2))
                 sig = _mk_sig(num, m.group(3), cur_g.color if cur_g else None)
                 sig.path = res.r(sig.path)
-                if cur_g: cur_g.sigs.append(sig)
+                if cur_g:
+                    cur_g.sigs.append(sig)
                 idx[num] = sig
                 continue
 
             m = _RG.match(s)
-            if m:                                           # N.    group header
-                parts  = m.group(2).split()
-                cur_g  = Group(num=m.group(1), name=parts[0],
-                               color=parts[1] if len(parts) > 1 else None)
+            if m:
+                parts = m.group(2).split()
+                cur_g = Group(num=m.group(1), name=parts[0],
+                              color=parts[1] if len(parts) > 1 else None)
                 groups.append(cur_g)
 
         # -- [EXPRESSIONS] ---------------------------------------------------
@@ -262,11 +255,10 @@ def parse_scn(path: Path, res: Resolver):
         # -- [SCENARIOS] -----------------------------------------------------
         elif section == 'SCENARIOS':
             m = _RSP.match(s)
-            if m:                                           # S1.M  param
+            if m:
                 if '=' in m.group(2) and cur_s:
                     k, _, v = m.group(2).partition('=')
                     key, val = k.strip(), v.strip()
-                    # Resolve N.M signal references -> actual paths
                     if key in ('watch', 'response', 'reference', 'compare', 'signals'):
                         val = ','.join(
                             idx[r.strip()].path if r.strip() in idx else r.strip()
@@ -276,101 +268,90 @@ def parse_scn(path: Path, res: Resolver):
                 continue
 
             m = _RSH.match(s)
-            if m:                                           # S1  type
+            if m:
                 cur_s = Scenario(num=m.group(1), type_=m.group(2).strip())
                 scenarios.append(cur_s)
 
-    return sim, groups, exprs, scenarios, idx
-
-
-def _peek_sim(path: Path) -> str:
-    """Quick scan: return sim = <value> from [BASE] section."""
-    in_base = False
-    for raw in open(path):
-        s = raw.split('#')[0].strip()
-        if s == '[BASE]':
-            in_base = True
-        elif s.startswith('[') and in_base:
-            break
-        elif in_base and s.startswith('sim') and '=' in s:
-            return s.split('=', 1)[1].strip()
-    return ''
+    return groups, exprs, scenarios, idx
 
 
 # =============================================================================
-# RC Generator  ->  output/signals.rc
+# TCL Generator  ->  output/<BASE>_<SCN>.tcl
 # =============================================================================
 
-def gen_rc(fsdb: str, groups: List[Group], exprs: List[Expr]) -> str:
+def gen_tcl(fsdb, base_name, scn_name, clk_sig, groups, exprs, scenarios, out_dir):
     ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    L: List[str] = [
-        f"# {'='*62}",
-        f"# Verdi nWave Signal RC",
-        f"# Generated : {ts}",
-        f"# FSDB      : {fsdb}",
-        f"# {'='*62}", "",
+    L  = [
+        "# {}".format('='*62),
+        "# Verdi nWave Analysis TCL",
+        "# Generated : {}".format(ts),
+        "# BASE      : {}".format(base_name),
+        "# Scenario  : {}".format(scn_name),
+        "# FSDB      : {}".format(fsdb),
+        "# {}".format('='*62),
+        "",
+        "set report_dir {{{}}}".format(str(out_dir)),
+        "set fsdb_file  {{{}}}".format(fsdb),
+        "",
     ]
-    def w(s=''): L.append(s)
+    def w(s=''):
+        L.append(s)
+
+    # -- Signal layout --------------------------------------------------------
+    w("# {}".format('='*62))
+    w("# Signal Layout")
+    w("# {}".format('='*62))
+    w()
 
     for g in groups:
-        bg = f" -color {g.color}" if g.color else ""
-        w(f"# {'-'*62}")
-        w(f"# {g.num}.  {g.name}")
-        w(f"# {'-'*62}")
-        w(f"addGroup{bg} {{{g.name}}}")
+        bg = " -backgroundcolor {}".format(g.color) if g.color else ""
+        w("# {}".format('-'*62))
+        w("# {}.  {}".format(g.num, g.name))
+        w("# {}".format('-'*62))
+        w("wvSetGroupBegin -name {{{}}}{}".format(g.name, bg))
         for sig in g.sigs:
-            opts = f" -radix {sig.radix}"
+            w("wvAddSignal {{{}}}".format(sig.path))
+            w("wvSetSignalRadix -radix {} {{{}}}".format(sig.radix, sig.path))
             if sig.color:
-                opts += f" -color {sig.color}"
+                w("wvSetSignalColor -color {} {{{}}}".format(sig.color, sig.path))
             if sig.height:
-                opts += f" -height {sig.height}"
+                w("wvSetSignalHeight -height {} {{{}}}".format(sig.height, sig.path))
             if sig.alias:
-                opts += f" -label {{{sig.alias}}}"
-            w(f"addSignal{opts} {{{sig.path}}}")
+                w("wvSetSignalAlias -alias {{{}}} {{{}}}".format(sig.alias, sig.path))
+        w("wvSetGroupEnd")
         w()
 
     if exprs:
-        w(f"# {'-'*62}")
+        w("# {}".format('-'*62))
         w("# EXPRESSIONS")
-        w(f"# {'-'*62}")
-        w("addGroup {EXPRESSIONS}")
+        w("# {}".format('-'*62))
+        w("wvSetGroupBegin -name {EXPRESSIONS} -backgroundcolor pink")
         for e in exprs:
-            w(f"addExprSignal -expr {{{e.expr}}} -radix {e.radix} -color {e.color} -label {{{e.alias}}}")
+            w("wvAddExprSignal -name {{{}}} -color {} -expr {{{}}}".format(
+                e.alias, e.color, e.expr))
+        w("wvSetGroupEnd")
         w()
 
-    w("zoomFit")
-    return '\n'.join(L)
+    w("wvZoomFit")
+    w()
 
-
-# =============================================================================
-# TCL Generator  ->  output/analysis.tcl
-# =============================================================================
-
-def gen_tcl(fsdb: str, clk_sig: str, scenarios: List[Scenario]) -> str:
-    ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    L: List[str] = [
-        f"# {'='*62}",
-        f"# Verdi nWave Analysis TCL",
-        f"# Generated : {ts}",
-        f"# FSDB      : {fsdb}",
-        f"# {'='*62}", "",
-        f"set report_dir {{{str(OUT_DIR)}}}",
-        f"set fsdb_file  {{{fsdb}}}", "",
-        f"# Load signal layout RC",
-        f"source \"{RC_FILE}\"", "",
-        f"# Clock period (ps) - auto-detect, fallback to 1000 ps (1 ns)",
-        f"if {{[catch {{set clk_period [nwGetClockPeriod {{{clk_sig}}}]}}]}} {{",
-        f"    set clk_period 1000",
-        f"}}", "",
-    ]
-    def w(s=''): L.append(s)
+    # -- Clock detection ------------------------------------------------------
+    w("# {}".format('='*62))
+    w("# Analysis")
+    w("# {}".format('='*62))
+    w()
+    w("# Clock period (ps) - auto-detect, fallback to 1000 ps (1 ns)")
+    w("if {[catch {set clk_period [nwGetClockPeriod {" + clk_sig + "}]}]} {")
+    w("    set clk_period 1000")
+    w("}")
+    w()
 
     _write_procs(w)
 
     for scn in scenarios:
-        w(f"# {'='*62}")
-        w(f"# Scenario {scn.num} : {scn.type}")
-        w(f"# {'='*62}")
+        w("# {}".format('='*62))
+        w("# Scenario {} : {}".format(scn.num, scn.type))
+        w("# {}".format('='*62))
         _DISPATCH.get(scn.type, _scn_unknown)(w, scn)
         w()
 
@@ -436,113 +417,116 @@ def _write_procs(w):
 
 # -- Per-scenario TCL writers --------------------------------------------------
 
-def _scn_sfr_check(w, scn: Scenario):
+def _scn_sfr_check(w, scn):
     watch    = [p.strip() for p in scn.params.get('watch', '').split(',') if p.strip()]
     response = scn.params.get('response', '')
     max_lat  = scn.params.get('max_latency', '16')
-    rpt      = f"$report_dir/{scn.num}_sfr_check.txt"
+    rpt      = "$report_dir/{}_sfr_check.txt".format(scn.num)
 
-    w(f"set fd [open {{{rpt}}} w]")
-    w(f"puts $fd \"SFR-Check {scn.num} - [clock format [clock seconds]]\"")
-    w(f"puts $fd \"response : {response}\"")
-    w(f"puts $fd \"max_lat  : {max_lat} cycles\"")
-    w(f"puts $fd \"{'='*60}\"")
+    w("set fd [open {{{}}} w]".format(rpt))
+    w("puts $fd \"SFR-Check {} - [clock format [clock seconds]]\"".format(scn.num))
+    w("puts $fd \"response : {}\"".format(response))
+    w("puts $fd \"max_lat  : {} cycles\"".format(max_lat))
+    w("puts $fd \"{}\"".format('='*60))
     for sfr in watch:
         lbl = sfr.rsplit('.', 1)[-1]
-        w(f"puts $fd \"\"")
-        w(f"puts $fd \"--- {lbl} ---\"")
-        w(f"scan_changes {{{sfr}}} {{{lbl}_}}")
-        w(f"set r [measure_latency {{{sfr}}} {{{response}}} {max_lat} $clk_period $fd]")
-        w(f"puts $fd \"  -> [lindex $r 0] OK  [lindex $r 1] FAIL\"")
-    w(f"close $fd")
-    w(f"puts \"[{scn.num}] sfr-check -> {rpt}\"")
+        w("puts $fd \"\"")
+        w("puts $fd \"--- {} ---\"".format(lbl))
+        w("scan_changes {{{}}} {{{}_}}".format(sfr, lbl))
+        w("set r [measure_latency {{{}}} {{{}}} {} $clk_period $fd]".format(
+            sfr, response, max_lat))
+        w("puts $fd \"  -> [lindex $r 0] OK  [lindex $r 1] FAIL\"")
+    w("close $fd")
+    w("puts \"{} sfr-check -> {}\"".format(scn.num, rpt))
 
 
-def _scn_timing(w, scn: Scenario):
+def _scn_timing(w, scn):
     ref  = scn.params.get('reference', '')
     cmps = [p.strip() for p in scn.params.get('compare', '').split(',') if p.strip()]
-    rpt  = f"$report_dir/{scn.num}_timing.txt"
+    rpt  = "$report_dir/{}_timing.txt".format(scn.num)
 
-    w(f"set fd [open {{{rpt}}} w]")
-    w(f"puts $fd \"Timing {scn.num} - [clock format [clock seconds]]\"")
-    w(f"puts $fd \"reference : {ref}\"")
-    w(f"puts $fd \"{'='*60}\"")
-    w(f"set t_ref [nwSearchNext -signal {{{ref}}} -type rising_edge \\")
-    w(f"                        -from [nwGetMinTime]]")
-    w(f"if {{$t_ref eq {{}}}} {{")
-    w(f"    puts $fd \"  [WARN] reference signal has no rising edge\"")
-    w(f"}} else {{")
-    w(f"    nwAddMarker -time $t_ref -name {{REF}} -color green")
-    w(f"    puts $fd \"  REF first edge @ ${{t_ref}}ps\"")
-    w(f"    puts $fd \"\"")
+    w("set fd [open {{{}}} w]".format(rpt))
+    w("puts $fd \"Timing {} - [clock format [clock seconds]]\"".format(scn.num))
+    w("puts $fd \"reference : {}\"".format(ref))
+    w("puts $fd \"{}\"".format('='*60))
+    w("set t_ref [nwSearchNext -signal {{{}}} -type rising_edge \\".format(ref))
+    w("                        -from [nwGetMinTime]]")
+    w("if {$t_ref eq {}} {")
+    w("    puts $fd \"  [WARN] reference signal has no rising edge\"")
+    w("} else {")
+    w("    nwAddMarker -time $t_ref -name {REF} -color green")
+    w("    puts $fd \"  REF first edge @ ${t_ref}ps\"")
+    w("    puts $fd \"\"")
     for cmp in cmps:
         lbl = cmp.rsplit('.', 1)[-1]
-        w(f"    set t_c [nwSearchNext -signal {{{cmp}}} -type rising_edge \\")
-        w(f"                         -from [nwGetMinTime]]")
-        w(f"    if {{$t_c ne {{}}}} {{")
-        w(f"        set d [expr {{$t_c - $t_ref}}]")
-        w(f"        nwAddMarker -time $t_c -name {{CMP_{lbl}}} -color orange")
-        w(f"        puts $fd [format \"  {lbl} : delta = %+d ps\" $d]")
-        w(f"    }} else {{")
-        w(f"        puts $fd \"  {lbl} : no rising edge\"")
-        w(f"    }}")
-    w(f"}}")
-    w(f"close $fd")
-    w(f"puts \"[{scn.num}] timing -> {rpt}\"")
+        w("    set t_c [nwSearchNext -signal {{{}}} -type rising_edge \\".format(cmp))
+        w("                         -from [nwGetMinTime]]")
+        w("    if {$t_c ne {}} {")
+        w("        set d [expr {$t_c - $t_ref}]")
+        w("        nwAddMarker -time $t_c -name {{CMP_{}}} -color orange".format(lbl))
+        w("        puts $fd [format \"  {} : delta = %+d ps\" $d]".format(lbl))
+        w("    } else {")
+        w("        puts $fd \"  {} : no rising edge\"".format(lbl))
+        w("    }")
+    w("}")
+    w("close $fd")
+    w("puts \"{} timing -> {}\"".format(scn.num, rpt))
 
 
-def _scn_edge_count(w, scn: Scenario):
+def _scn_edge_count(w, scn):
     sigs = [p.strip() for p in scn.params.get('signals', '').split(',') if p.strip()]
     edge = scn.params.get('edge', 'rising')
-    rpt  = f"$report_dir/{scn.num}_edge_count.txt"
+    rpt  = "$report_dir/{}_edge_count.txt".format(scn.num)
 
-    w(f"set fd [open {{{rpt}}} w]")
-    w(f"puts $fd \"Edge-Count {scn.num} - [clock format [clock seconds]]\"")
-    w(f"puts $fd \"edge: {edge}\"")
-    w(f"puts $fd \"{'='*60}\"")
-    w(f"set clk_cnt [count_edges [nwGetClockSignal] rising]")
-    w(f"puts $fd [format \"  %-54s %d\" {{CLK total cycles}} $clk_cnt]")
+    w("set fd [open {{{}}} w]".format(rpt))
+    w("puts $fd \"Edge-Count {} - [clock format [clock seconds]]\"".format(scn.num))
+    w("puts $fd \"edge: {}\"".format(edge))
+    w("puts $fd \"{}\"".format('='*60))
+    w("set clk_cnt [count_edges [nwGetClockSignal] rising]")
+    w("puts $fd [format \"  %-54s %d\" {CLK total cycles} $clk_cnt]")
     for sig in sigs:
         lbl = sig.rsplit('.', 1)[-1]
-        w(f"puts $fd [format \"  %-54s %d\" {{{lbl}}} [count_edges {{{sig}}} {edge}]]")
-    w(f"close $fd")
-    w(f"puts \"[{scn.num}] edge-count -> {rpt}\"")
+        w("puts $fd [format \"  %-54s %d\" {{{}}} [count_edges {{{}}} {}]]".format(
+            lbl, sig, edge))
+    w("close $fd")
+    w("puts \"{} edge-count -> {}\"".format(scn.num, rpt))
 
 
-def _scn_frame_sync(w, scn: Scenario):
-    std      = scn.params.get('standard',  'NR')
-    f_ns     = int(scn.params.get('frame_ns',  '10000000'))
-    sf_ns    = int(scn.params.get('subfrm_ns',  '500000'))
-    sl_ns    = int(scn.params.get('slot_ns',    '125000'))
-    n_frames = int(scn.params.get('num_frames', '4'))
+def _scn_frame_sync(w, scn):
+    std      = scn.params.get('standard',   'NR')
+    f_ns     = int(scn.params.get('frame_ns',   '10000000'))
+    sf_ns    = int(scn.params.get('subfrm_ns',   '500000'))
+    sl_ns    = int(scn.params.get('slot_ns',     '125000'))
+    n_frames = int(scn.params.get('num_frames',  '4'))
 
-    w(f"# {std}: frame={f_ns}ns  subframe={sf_ns}ns  slot={sl_ns}ns  n={n_frames}")
-    w(f"set unit_ps 1000   ;# 1ns=1000ps - adjust for your timescale")
-    w(f"set f_ps  [expr {{{f_ns}  * $unit_ps}}]")
-    w(f"set sf_ps [expr {{{sf_ns} * $unit_ps}}]")
-    w(f"set sl_ps [expr {{{sl_ns} * $unit_ps}}]")
-    w(f"set t0 [nwGetMinTime]; set tmax [nwGetMaxTime]")
-    w(f"for {{set fn 0}} {{$fn < {n_frames}}} {{incr fn}} {{")
-    w(f"    set tf [expr {{$t0 + $fn * $f_ps}}]")
-    w(f"    if {{$tf > $tmax}} break")
-    w(f"    nwAddMarker -time $tf -name \"F${{fn}}\" -color white")
-    w(f"    set nsf [expr {{$f_ps / $sf_ps}}]")
-    w(f"    for {{set sf 1}} {{$sf < $nsf}} {{incr sf}} {{")
-    w(f"        set tsf [expr {{$tf + $sf * $sf_ps}}]")
-    w(f"        nwAddMarker -time $tsf -name \"F${{fn}}_SF${{sf}}\" -color cyan")
-    w(f"        set nsl [expr {{$sf_ps / $sl_ps}}]")
-    w(f"        for {{set sl 1}} {{$sl < $nsl}} {{incr sl}} {{")
-    w(f"            nwAddMarker -time [expr {{$tsf + $sl * $sl_ps}}] \\")
-    w(f"                        -name \"F${{fn}}_SF${{sf}}_SL${{sl}}\" -color gray")
-    w(f"        }}")
-    w(f"    }}")
-    w(f"}}")
-    w(f"puts \"[{scn.num}] {std} frame markers ({n_frames} frames)\"")
-    w(f"nwZoom -from $t0 -to [expr {{$t0 + $f_ps}}]")
+    w("# {}: frame={}ns  subframe={}ns  slot={}ns  n={}".format(
+        std, f_ns, sf_ns, sl_ns, n_frames))
+    w("set unit_ps 1000   ;# 1ns=1000ps - adjust for your timescale")
+    w("set f_ps  [expr {{{}  * $unit_ps}}]".format(f_ns))
+    w("set sf_ps [expr {{{}  * $unit_ps}}]".format(sf_ns))
+    w("set sl_ps [expr {{{}  * $unit_ps}}]".format(sl_ns))
+    w("set t0 [nwGetMinTime]; set tmax [nwGetMaxTime]")
+    w("for {set fn 0} {$fn < " + str(n_frames) + "} {incr fn} {")
+    w("    set tf [expr {$t0 + $fn * $f_ps}]")
+    w("    if {$tf > $tmax} break")
+    w("    nwAddMarker -time $tf -name \"F${fn}\" -color white")
+    w("    set nsf [expr {$f_ps / $sf_ps}]")
+    w("    for {set sf 1} {$sf < $nsf} {incr sf} {")
+    w("        set tsf [expr {$tf + $sf * $sf_ps}]")
+    w("        nwAddMarker -time $tsf -name \"F${fn}_SF${sf}\" -color cyan")
+    w("        set nsl [expr {$sf_ps / $sl_ps}]")
+    w("        for {set sl 1} {$sl < $nsl} {incr sl} {")
+    w("            nwAddMarker -time [expr {$tsf + $sl * $sl_ps}] \\")
+    w("                        -name \"F${fn}_SF${sf}_SL${sl}\" -color gray")
+    w("        }")
+    w("    }")
+    w("}")
+    w("puts \"{} {} frame markers ({} frames)\"".format(scn.num, std, n_frames))
+    w("nwZoom -from $t0 -to [expr {$t0 + $f_ps}]")
 
 
-def _scn_unknown(w, scn: Scenario):
-    w(f"puts \"[WARN] unknown scenario type: {scn.type}\"")
+def _scn_unknown(w, scn):
+    w("puts \"[WARN] unknown scenario type: {}\"".format(scn.type))
 
 
 _DISPATCH = {
@@ -557,13 +541,27 @@ _DISPATCH = {
 # CLI
 # =============================================================================
 
+def _scn_name(raw):
+    """Strip optional 'scn_' prefix so user can pass either form."""
+    return raw[4:] if raw.startswith('scn_') else raw
+
+
 def list_scenarios():
     print("Scenarios (config/scn_*.lst):")
     for f in sorted(CFG_DIR.glob("scn_*.lst")):
         if f.name == "scn_base.lst":
             continue
-        sim = _peek_sim(f)
-        print(f"  {f.stem:<24}  sim={sim}")
+        print("  {}".format(_scn_name(f.stem)))
+    sys.exit(0)
+
+
+def list_bases():
+    if not BASE_FILE.exists():
+        sys.exit("[!] Missing: {}".format(BASE_FILE))
+    envs = parse_base(BASE_FILE)
+    print("BASE environments (config/scn_base.lst):")
+    for name in sorted(envs):
+        print("  {}".format(name))
     sys.exit(0)
 
 
@@ -572,64 +570,72 @@ def main():
         description="Verdi nWave LTE/NR Analysis Tool",
         epilog=(
             "examples:\n"
-            "  %(prog)s -f sim.fsdb -s scn_lte_crs\n"
-            "  %(prog)s -f sim.fsdb -s scn_nr_ssb --launch\n"
-            "  %(prog)s --list"
+            "  %(prog)s -s lte_crs -b topsim_lte -f sim.fsdb\n"
+            "  %(prog)s -s nr_ssb  -b blocksim_nr_ssb -f sim.fsdb\n"
+            "  %(prog)s --list\n"
+            "  %(prog)s --list-base"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    ap.add_argument("-f", "--fsdb",     help="FSDB file path")
-    ap.add_argument("-s", "--scenario", help="Scenario name (e.g. scn_lte_crs)")
-    ap.add_argument("--launch", action="store_true", help="Auto-launch Verdi")
-    ap.add_argument("--list",   action="store_true", help="List available scenarios")
+    ap.add_argument("-s", "--scenario", help="Scenario name (e.g. lte_crs)")
+    ap.add_argument("-b", "--base",     help="BASE env name from scn_base.lst")
+    ap.add_argument("-f", "--fsdb",     help="FSDB dump file path")
+    ap.add_argument("--regen",      action="store_true",
+                    help="Force regenerate TCL even if it already exists")
+    ap.add_argument("--list",       action="store_true", help="List scenarios")
+    ap.add_argument("--list-base",  action="store_true", help="List BASE envs")
     args = ap.parse_args()
 
     if args.list:
         list_scenarios()
+    if args.list_base:
+        list_bases()
 
-    if not args.fsdb or not args.scenario:
-        ap.error("-f and -s are required  (or use --list)")
+    if not args.scenario or not args.base or not args.fsdb:
+        ap.error("-s, -b, and -f are all required  (or use --list / --list-base)")
 
+    scn_name = _scn_name(args.scenario)
+    base_name = args.base
     fsdb = str(Path(args.fsdb).resolve())
+
     if not Path(fsdb).exists():
-        sys.exit(f"[!] FSDB not found: {fsdb}")
+        sys.exit("[!] FSDB not found: {}".format(fsdb))
 
     if not BASE_FILE.exists():
-        sys.exit(f"[!] Missing: {BASE_FILE}")
+        sys.exit("[!] Missing: {}".format(BASE_FILE))
     base_envs = parse_base(BASE_FILE)
+    if base_name not in base_envs:
+        sys.exit("[!] BASE '{}' not in {}\n    Available: {}".format(
+            base_name, BASE_FILE, list(base_envs)))
 
-    scn_file = CFG_DIR / f"{args.scenario}.lst"
+    scn_file = CFG_DIR / "scn_{}.lst".format(scn_name)
     if not scn_file.exists():
-        sys.exit(f"[!] Scenario not found: {scn_file}")
-
-    sim_name = _peek_sim(scn_file)
-    if sim_name not in base_envs:
-        sys.exit(f"[!] Sim env '{sim_name}' not in {BASE_FILE}\n"
-                 f"    Available: {list(base_envs)}")
-
-    res                               = Resolver(base_envs[sim_name])
-    sim, groups, exprs, scenarios, _  = parse_scn(scn_file, res)
-    clk_sig                           = res.r('clk')
+        sys.exit("[!] Scenario not found: {}".format(scn_file))
 
     OUT_DIR.mkdir(exist_ok=True)
-    RC_FILE.write_text(gen_rc(fsdb, groups, exprs))
-    TCL_FILE.write_text(gen_tcl(fsdb, clk_sig, scenarios))
+    tcl_file = OUT_DIR / "{}_{}.tcl".format(base_name, scn_name)
 
-    launch_cmd = (f"verdi -ssf {fsdb}"
-                  f" -play {TCL_FILE}")
+    if tcl_file.exists() and not args.regen:
+        print("[+] Using existing TCL: {}".format(tcl_file))
+    else:
+        res = Resolver(base_envs[base_name])
+        groups, exprs, scenarios, _ = parse_scn(scn_file, res)
+        clk_sig = res.r('clk')
+        tcl_file.write_text(
+            gen_tcl(fsdb, base_name, scn_name, clk_sig,
+                    groups, exprs, scenarios, OUT_DIR)
+        )
+        print("[+] Generated TCL : {}".format(tcl_file))
 
-    print(f"[+] sim      : {sim_name}")
-    print(f"[+] scenario : {args.scenario}")
-    print(f"[+] RC       : {RC_FILE}")
-    print(f"[+] TCL      : {TCL_FILE}")
+    launch_cmd = "verdi -ssf {} -play {}".format(fsdb, tcl_file)
+
+    print("[+] BASE     : {}".format(base_name))
+    print("[+] Scenario : {}".format(scn_name))
+    print("[+] TCL      : {}".format(tcl_file))
     print()
     print("=" * 64)
-    print(f"  {launch_cmd}")
+    print("  {}".format(launch_cmd))
     print("=" * 64)
-
-    if args.launch:
-        print("\n[+] launching Verdi ...")
-        subprocess.run(launch_cmd, shell=True)
 
 
 if __name__ == "__main__":

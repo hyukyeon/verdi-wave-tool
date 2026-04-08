@@ -1,0 +1,39 @@
+#!/bin/bash
+# run_verdi - Verdi nWave launch wrapper
+# Usage: run_verdi <SCN> <BASE> <DUMP>
+#
+#   SCN   scenario name          e.g. lte_crs
+#   BASE  env name in scn_base   e.g. topsim_lte
+#   DUMP  FSDB file path         e.g. /path/to/sim.fsdb
+#
+# If output/<BASE>_<SCN>.tcl already exists it is reused as-is.
+# Pass --regen as 4th argument to force regeneration.
+
+set -e
+
+if [ $# -lt 3 ]; then
+    echo "Usage: run_verdi <SCN> <BASE> <DUMP> [--regen]"
+    echo ""
+    echo "  SCN   scenario name  (e.g. lte_crs)"
+    echo "  BASE  env name       (e.g. topsim_lte)"
+    echo "  DUMP  FSDB file path"
+    echo ""
+    echo "Available scenarios:"
+    python3 "$(dirname "$0")/verdi_wave_tool.py" --list
+    exit 1
+fi
+
+SCN="$1"
+BASE="$2"
+DUMP="$3"
+REGEN="${4:-}"
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+python3 "$SCRIPT_DIR/verdi_wave_tool.py" \
+    -s "$SCN" -b "$BASE" -f "$DUMP" $REGEN
+
+TCL="$SCRIPT_DIR/output/${BASE}_${SCN}.tcl"
+echo ""
+echo "Launching: verdi -ssf $DUMP -play $TCL"
+verdi -ssf "$DUMP" -play "$TCL"
