@@ -313,11 +313,9 @@ def gen_rc(fsdb: str, groups: List[Group], exprs: List[Expr]) -> str:
     def w(s=''): L.append(s)
 
     for g in groups:
-        bg = f" -backgroundcolor {g.color}" if g.color else ""
         w(f"# {'-'*62}")
         w(f"# {g.num}.  {g.name}")
         w(f"# {'-'*62}")
-        w(f"wvSetGroupBegin -name {{{g.name}}}{bg}")
         for sig in g.sigs:
             w(f"wvAddSignal {{{sig.path}}}")
             w(f"wvSetSignalRadix -radix {sig.radix} {{{sig.path}}}")
@@ -327,17 +325,14 @@ def gen_rc(fsdb: str, groups: List[Group], exprs: List[Expr]) -> str:
                 w(f"wvSetSignalHeight -height {sig.height} {{{sig.path}}}")
             if sig.alias:
                 w(f"wvSetSignalAlias -alias {{{sig.alias}}} {{{sig.path}}}")
-        w("wvSetGroupEnd")
         w()
 
     if exprs:
         w(f"# {'-'*62}")
         w("# EXPRESSIONS")
         w(f"# {'-'*62}")
-        w("wvSetGroupBegin -name {EXPRESSIONS} -backgroundcolor pink")
         for e in exprs:
             w(f"wvAddExprSignal -name {{{e.alias}}} -color {e.color} -expr {{{e.expr}}}")
-        w("wvSetGroupEnd")
         w()
 
     w("wvZoomFit")
