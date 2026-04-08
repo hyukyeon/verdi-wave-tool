@@ -157,14 +157,14 @@ def gen_rc(groups, vbus_dict, markers, res):
                 w('addBus {} -name "{}"'.format(" ".join(opts), bus_name))
                 for bsig in vbus_dict[sig.path]:
                     w('  addBusSignal {}'.format(_nw(bsig)))
-            else:
-                # Normal signal
+            # Normal signal
                 resolved_path = _nw(res.r(sig.path))
-                w('addSignal {} {}'.format(" ".join(opts), resolved_path))
                 
-                # Apply Display Name (Alias) via separate rename command
+                # Apply Display Name (Alias)
                 if sig.alias:
-                    w('wvRenameSignal -win $win -signal "{}" -name "{}"'.format(resolved_path, sig.alias))
+                    opts.append("-name \"{}\"".format(sig.alias))
+                
+                w('addSignal {} {}'.format(" ".join(opts), resolved_path))
         w()
     
     return '\n'.join(L)
