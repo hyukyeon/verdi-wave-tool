@@ -117,13 +117,23 @@ def parse_scn(fpath, res):
     return groups, vbus_dict, markers
 
 def gen_rc(groups, vbus_dict, markers, res):
-    """Generates a Verdi RC file. Uses separate wvRenameSignal for aliases."""
+    """Generates a Verdi RC file. Uses addRenameSig at the top for aliases."""
     L = []
     def w(s=''): L.append(s)
 
     w("# Verdi Signal Save File")
-    w("set win $_nWave1")
     w()
+
+    # -- Global Renames (Aliases) must come first ------------------------------
+    rename_count = 0
+    for g in groups:
+        for sig in g.sigs:
+            if sig.alias and sig.path not in vbus_dict:
+                resolved_path = _nw(res.r(sig.path))
+                # Format: addRenameSig "Alias" "Real_Path"
+                w('addRenameSig "{}" "{}"'.format(sig.alias, resolved_path))
+                rename_count += 1
+    if rename_count > 0: w()
 
     # -- Markers ---------------------------------------------------------------
     for m in markers:
@@ -157,13 +167,9 @@ def gen_rc(groups, vbus_dict, markers, res):
                 w('addBus {} -name "{}"'.format(" ".join(opts), bus_name))
                 for bsig in vbus_dict[sig.path]:
                     w('  addBusSignal {}'.format(_nw(bsig)))
-            # Normal signal
+            else:
+                # Normal signal
                 resolved_path = _nw(res.r(sig.path))
-                
-                # Apply Display Name (Alias)
-                if sig.alias:
-                    opts.append("-name \"{}\"".format(sig.alias))
-                
                 w('addSignal {} {}'.format(" ".join(opts), resolved_path))
         w()
     
