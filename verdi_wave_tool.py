@@ -117,11 +117,12 @@ def parse_scn(fpath, res):
     return groups, vbus_dict, markers
 
 def gen_rc(groups, vbus_dict, markers, res):
-    """Generates a Verdi RC file using single-line addSignal/addBus commands."""
+    """Generates a Verdi RC file. Uses separate wvRenameSignal for aliases."""
     L = []
     def w(s=''): L.append(s)
 
     w("# Verdi Signal Save File")
+    w("set win $_nWave1")
     w()
 
     # -- Markers ---------------------------------------------------------------
@@ -149,10 +150,6 @@ def gen_rc(groups, vbus_dict, markers, res):
                 opts.append("-analog")
             elif sig.radix.lower() in ['hex', 'bin', 'dec', 'oct']:
                 opts.append("-{}".format(sig.radix.upper()))
-            
-            # Alias (Display Name)
-            if sig.alias:
-                opts.append("-name \"{}\"".format(sig.alias))
 
             # Check if it's a Virtual Bus
             if sig.path in vbus_dict:
@@ -164,6 +161,10 @@ def gen_rc(groups, vbus_dict, markers, res):
                 # Normal signal
                 resolved_path = _nw(res.r(sig.path))
                 w('addSignal {} {}'.format(" ".join(opts), resolved_path))
+                
+                # Apply Display Name (Alias) via separate rename command
+                if sig.alias:
+                    w('wvRenameSignal -win $win -signal "{}" -name "{}"'.format(resolved_path, sig.alias))
         w()
     
     return '\n'.join(L)
