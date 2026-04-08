@@ -309,7 +309,6 @@ def gen_rc(fsdb: str, groups: List[Group], exprs: List[Expr]) -> str:
         f"# Generated : {ts}",
         f"# FSDB      : {fsdb}",
         f"# {'='*62}", "",
-        f"debImport -sv4 {{{fsdb}}}", "",
     ]
     def w(s=''): L.append(s)
 
@@ -359,7 +358,6 @@ def gen_tcl(fsdb: str, clk_sig: str, scenarios: List[Scenario]) -> str:
         f"# {'='*62}", "",
         f"set report_dir {{{str(OUT_DIR)}}}",
         f"set fsdb_file  {{{fsdb}}}", "",
-        f"source {{{str(RC_FILE)}}}", "",
         f"# Clock period (ps) - auto-detect, fallback to 1000 ps (1 ns)",
         f"if {{[catch {{set clk_period [nwGetClockPeriod {{{clk_sig}}}]}}]}} {{",
         f"    set clk_period 1000",
