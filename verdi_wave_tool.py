@@ -94,37 +94,42 @@ class Resolver:
     """
     Resolves path tokens in scn_*.lst to full signal paths.
 
-    Keywords -> base env value (may start with top. which expands further)
-      clk, rst, frame, subfrm, slot, sym
+    Exact env key  ->  env[key] value, recursively expanded
+      e.g. clk  ->  tb.sys_clk
+           frame ->  top.sfn[9:0]  ->  tb.u_top.u_lte_bb.sfn[9:0]
 
-    Prefixes -> base env paths
-      top.X  ->  {env[top]}.X
-      sfr.X  ->  {env[sfr]}.X
+    Prefix notation  ->  env[key].rest, recursively expanded
+      e.g. top.signal  ->  tb.u_top.u_lte_bb.signal
+           ABC.sub     ->  tb.dut.aa.sub   (if ABC = tb.dut.aa in base)
+
+    Literal paths (first component not an env key)  ->  unchanged
+      e.g. tb.dut.ABC  ->  tb.dut.ABC     (safe even if ABC is an env key)
     """
-    KEYS = ('clk', 'rst', 'frame', 'subfrm', 'slot', 'sym')
 
     def __init__(self, env: Dict[str, str]):
         self.env = env
-        self.top = env.get('top', 'tb.dut')
-        self.sfr = env.get('sfr', f'{self.top}.sfr')
+        # Sort longest-first so longer keys take precedence over shorter prefixes
+        self._keys = sorted(env.keys(), key=len, reverse=True)
 
     def r(self, p: str) -> str:
         p = p.strip()
-        if p in self.KEYS:
-            return self._expand(self.env.get(p, p))
-        if p.startswith('top.'):
-            return f"{self.top}.{p[4:]}"
-        if p.startswith('sfr.'):
-            return f"{self.sfr}.{p[4:]}"
+        # Exact match: the whole token is an env key
+        if p in self.env:
+            val = self.env[p]
+            return self.r(val) if val != p else p
+        # Prefix match: first dot-separated component is an env key
+        dot = p.find('.')
+        if dot > 0:
+            prefix = p[:dot]
+            if prefix in self.env:
+                return f"{self.r(self.env[prefix])}.{p[dot+1:]}"
         return p
 
-    def _expand(self, v: str) -> str:
-        return f"{self.top}.{v[4:]}" if v.startswith('top.') else v
-
     def expr(self, s: str) -> str:
-        """Resolve top./sfr. tokens inside an expression string."""
-        for pfx in ('top.', 'sfr.'):
-            for m in re.finditer(re.escape(pfx) + r'[\w\[\]:.]+', s):
+        """Resolve env-key-prefixed tokens inside an expression string."""
+        for key in self._keys:
+            pat = re.escape(key) + r'\.[\w\[\]:.]+'
+            for m in re.finditer(pat, s):
                 s = s.replace(m.group(), self.r(m.group()), 1)
         return s
 
