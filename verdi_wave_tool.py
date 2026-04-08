@@ -117,7 +117,7 @@ def parse_scn(fpath, res):
     return groups, vbus_dict, markers
 
 def gen_rc(groups, vbus_dict, markers, res):
-    """Generates a Verdi RC file. Uses addRenameSig at the top for aliases."""
+    """Generates a Verdi RC file. Uses hierarchical addRenameSig for aliases."""
     L = []
     def w(s=''): L.append(s)
 
@@ -129,9 +129,17 @@ def gen_rc(groups, vbus_dict, markers, res):
     for g in groups:
         for sig in g.sigs:
             if sig.alias and sig.path not in vbus_dict:
-                resolved_path = _nw(res.r(sig.path))
-                # Format: addRenameSig "Alias" "Real_Path"
-                w('addRenameSig "{}" "{}"'.format(sig.alias, resolved_path))
+                real_path = _nw(res.r(sig.path))
+                # Create 'virtual' path with alias replacing the last component
+                # Example: /tb/dut/realname -> /tb/dut/aliasname
+                if '/' in real_path:
+                    parent = real_path.rsplit('/', 1)[0]
+                    virtual_path = parent + '/' + sig.alias
+                else:
+                    virtual_path = '/' + sig.alias
+                
+                # Format: addRenameSig "Virtual_Path" "Real_Path"
+                w('addRenameSig "{}" "{}"'.format(virtual_path, real_path))
                 rename_count += 1
     if rename_count > 0: w()
 
@@ -184,7 +192,7 @@ def main():
     ap.add_argument("-s", "--scenario", help="Scenario name")
     ap.add_argument("-b", "--base",     help="BASE env name")
     ap.add_argument("--regen",      action="store_true", help="Force regenerate RC")
-    ap.add_argument("--list",       action="store_true", help="List scenarios")
+    ap.add_argument("-l", "--list", action="store_true", help="List scenarios")
     ap.add_argument("--list-base",  action="store_true", help="List BASE envs")
     args = ap.parse_args()
 
