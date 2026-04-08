@@ -35,5 +35,5 @@ python3 "$SCRIPT_DIR/verdi_wave_tool.py" \
 
 TCL="$SCRIPT_DIR/output/${BASE}_${SCN}.tcl"
 echo ""
-echo "Launching: verdi -ssf $DUMP -play $TCL"
-verdi -ssf "$DUMP" -play "$TCL"
+echo "Launching: verdi -play $TCL"
+verdi -play "$TCL"
