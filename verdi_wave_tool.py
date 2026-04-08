@@ -313,29 +313,32 @@ def gen_rc(fsdb: str, groups: List[Group], exprs: List[Expr]) -> str:
     def w(s=''): L.append(s)
 
     for g in groups:
+        bg = f" -color {g.color}" if g.color else ""
         w(f"# {'-'*62}")
         w(f"# {g.num}.  {g.name}")
         w(f"# {'-'*62}")
+        w(f"addGroup{bg} {{{g.name}}}")
         for sig in g.sigs:
-            w(f"wvAddSignal {{{sig.path}}}")
-            w(f"wvSetSignalRadix -radix {sig.radix} {{{sig.path}}}")
+            opts = f" -radix {sig.radix}"
             if sig.color:
-                w(f"wvSetSignalColor -color {sig.color} {{{sig.path}}}")
+                opts += f" -color {sig.color}"
             if sig.height:
-                w(f"wvSetSignalHeight -height {sig.height} {{{sig.path}}}")
+                opts += f" -height {sig.height}"
             if sig.alias:
-                w(f"wvSetSignalAlias -alias {{{sig.alias}}} {{{sig.path}}}")
+                opts += f" -label {{{sig.alias}}}"
+            w(f"addSignal{opts} {{{sig.path}}}")
         w()
 
     if exprs:
         w(f"# {'-'*62}")
         w("# EXPRESSIONS")
         w(f"# {'-'*62}")
+        w("addGroup {EXPRESSIONS}")
         for e in exprs:
-            w(f"wvAddExprSignal -name {{{e.alias}}} -color {e.color} -expr {{{e.expr}}}")
+            w(f"addExprSignal -expr {{{e.expr}}} -radix {e.radix} -color {e.color} -label {{{e.alias}}}")
         w()
 
-    w("wvZoomFit")
+    w("zoomFit")
     return '\n'.join(L)
 
 
